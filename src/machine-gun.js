@@ -1,10 +1,19 @@
 import * as T from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { supportArm } from './weapon-rig.js';
+import { beltMaterial, finishGeometry, housingMaterial, loadMachineFinishes } from './mg3-finish.js';
 
 const v = (x, y, z) => new T.Vector3(x, y, z);
 const ease = T.MathUtils.smoothstep;
 const halfPi = Math.PI / 2;
+
+// Both open sights share this height in the gun's local space. The top of the
+// front post is the point of aim, with clear air above it in the rear notch.
+const sightLine = .202, lidHeight = .115;
+function sightBlade(profile, depth, z) {
+  const face = new T.Shape(profile.map(([x, y]) => new T.Vector2(x, y)));
+  return new T.ExtrudeGeometry(face, { depth, bevelEnabled: false }).translate(0, 0, z);
+}
 
 // Each moving assembly is batched by finish. Individual rivets and vent faces share draw calls.
 function assembly(parent) {
@@ -27,10 +36,22 @@ function assembly(parent) {
     add(m, new T.ExtrudeGeometry(shape, { depth: width, bevelEnabled: true, bevelSize: 0.003,
       bevelThickness: 0.003, bevelSegments: 1 }).rotateY(-halfPi).translate(x + width / 2, 0, 0));
   }
-  function finish() {
-    for (const [m, geos] of batches) parent.add(new T.Mesh(mergeGeometries(geos), m));
+  function screw(face, recess, x, y, z, radius, normal, angle) {
+    const orient = new T.Quaternion().setFromUnitVectors(T.Object3D.DEFAULT_UP, normal);
+    function place(material, geometry) {
+      add(material,geometry.rotateY(angle).applyQuaternion(orient).translate(x,y,z));
+    }
+    place(recess,new T.CylinderGeometry(radius*1.18,radius*1.21,.0025,20));
+    place(face,new T.CylinderGeometry(radius*.83,radius,.004,20).translate(0,.0023,0));
+    place(recess,new T.BoxGeometry(radius*1.26,.00045,radius*.16).translate(0,.00445,0));
   }
-  return { add, box, tube, plate, finish };
+  function finish() {
+    for (const [m, geos] of batches) {
+      const geometry = mergeGeometries(geos);
+      parent.add(new T.Mesh(m.userData.mgFinish ? finishGeometry(geometry) : geometry, m));
+    }
+  }
+  return { add, box, tube, plate, screw, finish };
 }
 
 function ventPanel(w) {
@@ -46,7 +67,8 @@ function ventPanel(w) {
     slot.absarc(a, 0, r, -halfPi, halfPi, true);
     shape.holes.push(slot);
   }
-  return new T.ExtrudeGeometry(shape, { depth: 0.006, bevelEnabled: false, curveSegments: 4 }).rotateY(halfPi);
+  return new T.ExtrudeGeometry(shape, { depth: 0.006, bevelEnabled: true, bevelThickness: .0012,
+    bevelSize: .0014, bevelSegments: 1, curveSegments: 5 }).rotateY(halfPi);
 }
 
 // Bent sheet metal has rolled shoulders and a shallow crown that catches a narrow highlight.
@@ -71,9 +93,7 @@ function pressedHousing(sections) {
   g.setAttribute('position', new T.Float32BufferAttribute(vertices,3));
   g.setAttribute('uv', new T.Float32BufferAttribute(new Float32Array(vertices.length/3*2),2));
   g.setIndex(indices);
-  const faces = g.toNonIndexed();
-  faces.computeVertexNormals();
-  return faces;
+  return toCreasedNormals(g, .71);
 }
 
 function stamping(parent, text, width, length, x, y, z, paint) {
@@ -95,51 +115,50 @@ function stamping(parent, text, width, length, x, y, z, paint) {
   return ink;
 }
 
-function finishSteel(color, roughness, detail) {
-  const m = new T.MeshStandardMaterial({ color, metalness: 0.79, roughness });
-  m.onBeforeCompile = shader => {
-    shader.uniforms.mgFinish = { value: detail };
-    shader.vertexShader = 'varying vec2 vStamp;\n' + shader.vertexShader.replace(
-      '#include <begin_vertex>', '#include <begin_vertex>\nvStamp=vec2(position.z*2.8+(position.x*.43),position.y*7.+position.x*4.);');
-    shader.fragmentShader = 'varying vec2 vStamp;uniform sampler2D mgFinish;\n' + shader.fragmentShader
-      .replace('#include <color_fragment>', '#include <color_fragment>\nvec2 grain=texture2D(mgFinish,vStamp).rg;diffuseColor.rgb*=.79+.38*grain.g+.12*grain.r;')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+.24*(grain.r-.5),.23,.85);');
-  };
-  m.customProgramCacheKey = () => 'mg3-stamped-steel';
-  return m;
-}
-
-function cartridges() {
+function cartridges(maps) {
   const parts = [];
-  function colored(g, color) {
-    const rgb = new T.Color(color), colors = new Float32Array(g.attributes.position.count * 3);
-    for (let i = 0; i < colors.length; i += 3) rgb.toArray(colors, i);
-    g.setAttribute('color', new T.BufferAttribute(colors, 3));
+  const brass = [0xe5c585,.205,.98], copper = [0xc68460,.25,.97];
+  const springSteel = [0x455057,.42,.85], primer = [0xd6d0bd,.22,.96];
+  function add(g, [color, roughness, metalness], head = false, bridge = false) {
+    const count = g.attributes.position.count;
+    const rgb = new T.Color(color), colors = new Float32Array(count*3), alloy = new Float32Array(count*3);
+    for (let i = 0; i < count*3; i+=3) {
+      rgb.toArray(colors,i);
+      alloy[i] = roughness; alloy[i+1] = metalness; alloy[i+2] = Number(head);
+    }
+    g.setAttribute('color', new T.BufferAttribute(colors,3));
+    g.setAttribute('mgAlloy', new T.BufferAttribute(alloy,3));
+    const weights = new Float32Array(count);
+    if (bridge) {
+      for (let i=0; i<count; i++) weights[i] = -g.attributes.position.getX(i)/.034;
+    }
+    g.setAttribute('mgBridge', new T.BufferAttribute(weights,1));
     parts.push(g);
   }
-  function segment(front, back, length, z, color) {
-    const g = new T.CylinderGeometry(front, back, length, 12).rotateX(-halfPi).translate(0, 0, z).toNonIndexed();
-    colored(g,color);
+  function turned(profile, alloy, head = false, start = 0, arc = Math.PI*2) {
+    const g = new T.LatheGeometry(profile.map(([r,z]) => new T.Vector2(r,z)),32,start,arc);
+    add(g.rotateX(halfPi).toNonIndexed(),alloy,head);
   }
-  segment(0.013, 0.0145, 0.082, 0.008, 0xc99c4c);
-  segment(0.009, 0.013, 0.013, -0.039, 0xe5bb68);
-  segment(0.0014, 0.009, 0.033, -0.062, 0xb76d48);
-  segment(0.016, 0.016, 0.018, 0.000, 0x52585b);
-  segment(0.016, 0.016, 0.009, 0.025, 0x62696c);
-  segment(0.012, 0.012, 0.005, 0.050, 0x65502f);
-  segment(0.0148, 0.0148, 0.004, 0.0545, 0xbd9250);
-  segment(0.0062, 0.0062, 0.002, 0.0572, 0x685e48);
-  segment(0.0048, 0.0048, 0.001, 0.0587, 0xdbb97a);
-  for (const z of [0.000,0.024])
-    colored(new T.BoxGeometry(.041,.005,.010).translate(-.013,-.009,z).toNonIndexed(),0x52565a);
-  const belt = new T.InstancedMesh(mergeGeometries(parts),
-    new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.72, roughness: 0.35 }), 9);
+  turned([[0,-.083],[.0022,-.080],[.0055,-.073],[.0078,-.063],[.0086,-.054],[.0086,-.044]],copper);
+  turned([[.0087,-.048],[.0096,-.0476],[.0097,-.038],[.013,-.030],[.0135,-.024],
+    [.0147,.042],[.0144,.045],[.0123,.048],[.0123,.051],[.0142,.0513],[.0147,.0524],[.0147,.0546]],brass);
+  turned([[.0147,.0546],[.01435,.0555],[.0135,.0561],[.0113,.05655],[.0083,.05665],
+    [.0061,.0563],[.0055,.0555],[.0051,.0546]],brass,true);
+  turned([[.0051,.0546],[.0049,.0557],[.0041,.05635],[.0022,.05665],[0,.0567]],primer);
+  // Rolled open steel links leave the shoulder and the drawn brass case visible between clips.
+  for (const z of [-.012,.018]) {
+    turned([[.0143,z],[.0154,z+.0008],[.01565,z+.002],[.0157,z+.0078],[.0151,z+.009],[.0144,z+.0096]],
+      springSteel,false,.76,Math.PI*1.55);
+    add(new T.BoxGeometry(.034,.005,.008).translate(-.017,-.009,z+.0048).toNonIndexed(),springSteel,false,true);
+  }
+  const belt = new T.InstancedMesh(mergeGeometries(parts),beltMaterial(maps),9);
+  belt.geometry.setAttribute('mgSpan',new T.InstancedBufferAttribute(new Float32Array(9*3),3).setUsage(T.DynamicDrawUsage));
   belt.instanceMatrix.setUsage(T.DynamicDrawUsage);
   belt.frustumCulled = false;
   return belt;
 }
 
-export function installMachineGun(body, arms, detail) {
+export function installMachineGun(body, arms) {
   const space = new T.Group();
   space.add(arms);
   space.updateMatrixWorld(true);
@@ -151,12 +170,12 @@ export function installMachineGun(body, arms, detail) {
   arms.traverse(o => { if (o.isSkinnedMesh) o.frustumCulled = false; });
   const finger = space.getObjectByName('Bone_R005') ?? space.getObjectByName('Bone_R.005');
   const triggerBind = finger?.quaternion.clone();
-  const steel = finishSteel(0x464e53, 0.45, detail);
-  const edge = finishSteel(0x70787a, 0.32, detail);
-  const barrel = finishSteel(0x323638, 0.46, detail);
-  const olive = finishSteel(0x66704b, 0.64, detail);
-  olive.metalness = 0.36;
-  const polymer = new T.MeshStandardMaterial({ color: 0x363636, roughness: 0.69 });
+  const maps = loadMachineFinishes();
+  const steel = housingMaterial('steel',0x424c55,.465,.79,maps);
+  const edge = housingMaterial('steel',0x777e82,.34,.88,maps);
+  const barrel = housingMaterial('steel',0x353a3c,.50,.76,maps);
+  const olive = housingMaterial('enamel',0x616b47,.55,.10,maps);
+  const polymer = housingMaterial('polymer',0x373837,.62,.025,maps);
   const bore = new T.MeshStandardMaterial({ color: 0x111414, roughness: 0.92 });
   const fixed = assembly(space);
 
@@ -177,8 +196,10 @@ export function installMachineGun(body, arms, detail) {
     fixed.plate(barrel, [[-1.65,-.017],[-1.48,-.044],[-1.06,-.062],[-1.045,-.038],[-1.52,-.017]],.013,side*.076);
     fixed.box(steel,side*.076,-.049,-1.055,.046,.041,.076);
     fixed.box(edge,side*.065,.028,-.349,.009,.012,.65);
+    const outward = v(side,0,0);
     for (const z of [-.07,-.195,-.411,-.595,-.697])
-      fixed.tube(edge,side*.067,.053,z,.011,.011,.012,'x');
+      fixed.screw(edge,barrel,side*.067,.053,z,.010,outward,z*19);
+    fixed.plate(steel,[[-.61,.003],[-.58,.011],[-.27,.011],[-.241,.004],[-.27,-.002],[-.58,-.002]],.004,side*.067);
   }
   fixed.add(steel, ventPanel(.111).rotateZ(halfPi).translate(0,.094,-.723));
   fixed.box(barrel,0,-.014,-1.225,.105,.012,.98);
@@ -191,15 +212,21 @@ export function installMachineGun(body, arms, detail) {
   fixed.add(edge,new T.TorusGeometry(.060,.005,6,24).translate(0,.041,-1.958));
   fixed.box(steel,0,.115,-1.64,.104,.042,.06);
   for(const side of [-1,1]) fixed.plate(steel,[[-1.665,.124],[-1.667,.202],[-1.65,.212],[-1.625,.141]],.012,side*.042);
-  fixed.plate(edge,[[-1.65,.122],[-1.65,.197],[-1.641,.197],[-1.63,.123]],.009);
+  fixed.add(steel, sightBlade([[-.011,.124],[.011,.124],[.006,sightLine],[-.006,sightLine]], .014, -1.655));
   fixed.box(barrel,.073,.032,-.42,.006,.045,.20);
   // Carrier hooks bridge the box to the left receiver wall below the moving belt.
   for (const z of [-.40,-.59]) {
-    fixed.box(steel,-.113,-.013,z,.115,.019,.031);
-    fixed.box(barrel,-.159,-.035,z,.022,.059,.031);
+    const yoke = new T.Shape([[-.064,.000],[-.146,-.005],[-.161,-.019],[-.161,-.046],
+      [-.151,-.050],[-.143,-.027],[-.125,-.020],[-.064,-.015]].map(([x,y]) => new T.Vector2(x,y)));
+    fixed.add(steel,new T.ExtrudeGeometry(yoke,{depth:.025,bevelSize:.002,bevelThickness:.002,bevelSegments:1})
+      .translate(0,0,z-.013));
+    fixed.tube(edge,-.15,-.037,z,.008,.008,.038);
   }
   fixed.plate(barrel, [[.056,.094],[.071,.105],[.103,.102],[.117,.089],[.108,-.035],[.067,-.04]], .134);
-  for (const z of [-.07,-.024]) fixed.tube(edge,0,.107,z,.009,.010,.002,'y');
+  fixed.screw(edge,barrel,-.034,.105,-.069,.009,T.Object3D.DEFAULT_UP,.46);
+  fixed.screw(edge,barrel,.034,.105,-.069,.009,T.Object3D.DEFAULT_UP,-.75);
+  fixed.plate(barrel,[[-.224,.060],[-.21,.084],[-.15,.061],[-.141,.046],[-.16,.040]],.011,-.076);
+  fixed.screw(edge,barrel,-.084,.066,-.206,.014,v(-1,0,0),.35);
   // Guides, pawls and bolt track are exposed while replacing the belt.
   fixed.box(barrel,0,.111,-.457,.115,.007,.344);
   for (const x of [-.043,.043]) fixed.box(edge,x,.119,-.453,.009,.011,.306);
@@ -209,23 +236,26 @@ export function installMachineGun(body, arms, detail) {
   fixed.finish();
 
   const lid = new T.Group(), box = new T.Group(), bolt = new T.Group();
-  lid.position.set(0,.115,-.662);
+  lid.position.set(0,lidHeight,-.662);
   const cover = assembly(lid);
   cover.add(steel,pressedHousing([[-.012,.069,.014,-.014],[.047,.079,.047,-.014],
     [.285,.077,.053,-.015],[.395,.072,.040,-.016],[.443,.067,.026,-.014],[.459,.063,.012,-.009]]));
   for (const x of [-.052,.052])
     cover.plate(steel,[[.050,.036],[.072,.049],[.246,.054],[.266,.045],[.24,.043],[.073,.039]],.009,x);
   cover.tube(edge,0,0,0,.018,.018,.184,'x');
-  // Tangent rear sight: sloped leaf, graduation marks and a shallow V notch.
-  cover.plate(barrel,[[.096,.049],[.325,.080],[.344,.072],[.327,.054],[.105,.043]],.055);
+  // Keep the tangent leaf below the notch so the front blade stays visible through it.
+  cover.plate(barrel,[[.096,.049],[.325,.066],[.344,.062],[.327,.054],[.105,.043]],.055);
   for (let i=0;i<8;i++) {
     const z=.125+i*.022;
-    cover.box(edge,-.014,.055+i*.0030,z,i%2===0?.016:.009,.0018,.0028);
+    cover.box(edge,-.014,.054+i*.00165,z,i%2===0?.016:.009,.0018,.0028);
   }
-  cover.box(steel,0,.070,.244,.072,.017,.022);
+  cover.box(steel,0,.064,.244,.072,.012,.022);
+  const lip = sightLine - lidHeight;
+  cover.add(barrel, sightBlade([[-.043,.059],[.043,.059],[.043,lip-.006],[.036,lip],
+    [.0095,lip],[.006,lip-.014],[-.006,lip-.014],[-.0095,lip],[-.036,lip],[-.043,lip-.006]],
+    .014, .326));
   for (const side of [-1,1]) {
-    const ear = new T.BoxGeometry(.021,.023,.012).rotateZ(side*.52).translate(side*.013,.080,.332);
-    cover.add(barrel,ear);
+    cover.screw(edge,barrel,side*.074,.019,.348,.008,v(side,0,0),1.2);
   }
   for (let i=0;i<5;i++) cover.box(barrel,0,.015-i*.001,.427+i*.005,.084,.008,.002);
   cover.box(edge,0,-.008,.452,.076,.020,.024);
@@ -248,18 +278,30 @@ export function installMachineGun(body, arms, detail) {
   for(const side of [-1,1]) {
     for(const z of [-.107,.092]) bin.box(olive,side*.103,-.016,z,.009,.22,.017);
     bin.box(edge,side*.104,.104,.008,.012,.022,.049);
+    // The folded lips and toggle catch interrupt the otherwise flat front and side panels.
+    bin.plate(olive,[[.154,.102],[.155,.114],[-.15,.116],[-.16,.104]],.008,side*.105);
+    bin.plate(olive,[[.155,-.103],[.132,-.156],[-.142,-.155],[-.150,-.146],[.122,-.146]],.008,side*.103);
   }
-  for(const x of [-.065,.065]) bin.box(olive,x,-.016,.153,.013,.16,.012);
+  for(const x of [-.082,.082]) {
+    bin.plate(olive,[[.154,.086],[.165,.083],[.168,.068],[.166,-.076],[.158,-.090],[.153,-.081]],.011,x);
+    bin.tube(olive,x,.096,.160,.006,.008,.007);
+  }
+  bin.box(olive,0,.101,.163,.049,.023,.008);
+  bin.tube(edge,0,.102,.170,.005,.005,.045,'x');
+  for (const x of [-.016,.016]) bin.box(barrel,x,.087,.169,.006,.030,.006);
+  bin.tube(steel,0,.072,.169,.004,.004,.038,'x');
   bin.finish();
-  stamping(box,'200 PATR.',.152,.039,0,.137,-.108,'#cfbe8a');
-  stamping(box,'7,62  •  NATO',.15,.030,0,.048,.165,'#b6ad83').rotation.x = halfPi;
   const boxHome = v(-.248,-.166,-.49);
   box.position.copy(boxHome);
   const handle = assembly(bolt);
   handle.box(edge,.076,.030,-.39,.028,.024,.093);
   handle.tube(steel,.102,.031,-.35,.02,.025,.066,'x');
   handle.finish();
-  const belt = cartridges(), link = new T.Object3D();
+  const belt = cartridges(maps), link = new T.Object3D();
+  const feedPath = new T.CubicBezierCurve3(v(-.041,.078,-.494),v(-.16,.116,-.485),
+    v(-.245,.092,-.501),v(-.257,-.072,-.498));
+  const centers = Array.from({length:10}, () => new T.Vector3());
+  const span = new T.Vector3(), inverseLink = new T.Quaternion();
   space.add(lid, box, bolt, belt);
   const unit = .52;
   space.scale.setScalar(unit);
@@ -301,15 +343,25 @@ export function installMachineGun(body, arms, detail) {
     if (belt.count === lastCount && feed === lastFeed) return;
     lastCount = belt.count;
     lastFeed = feed;
+    // Equal distances along the arc keep the rounds at the same pitch as the belt bends.
+    // The far end of each steel strap terminates at the neighbouring link, even on the turn into the box.
+    for (let i=0; i<=belt.count; i++) feedPath.getPointAt(Math.min(1,(i+feed)/9),centers[i]);
     for (let i = 0; i < belt.count; i++) {
-      const u = (i + feed) / 9;
-      link.position.set(-.042-.222*u,.078+.036*Math.sin(u*Math.PI)-.127*u*u,-.494);
-      link.rotation.z = Math.atan2(.254*u-.036*Math.PI*Math.cos(u*Math.PI),.222);
+      const u = (i+feed)/9;
+      link.position.copy(centers[i]);
+      span.subVectors(centers[i+1],centers[i]);
+      if (span.lengthSq()<1e-10 && i>0) span.subVectors(centers[i],centers[i-1]);
+      const twist = Math.sin(Math.PI*u);
+      link.rotation.set(.06+.12*twist,.07+.46*twist+.06*u,Math.atan2(-span.y,-span.x),'ZXY');
       link.updateMatrix();
       belt.setMatrixAt(i,link.matrix);
+      span.applyQuaternion(inverseLink.copy(link.quaternion).invert());
+      if (i===belt.count-1) span.set(0,0,0);
+      belt.geometry.attributes.mgSpan.setXYZ(i,span.x,span.y,span.z);
     }
     belt.visible = belt.count > 0;
     belt.instanceMatrix.needsUpdate = true;
+    belt.geometry.attributes.mgSpan.needsUpdate = true;
   }
-  return { tip, port, sightY: 0, pose };
+  return { tip, port, sightY: space.position.y + sightLine * unit, pose };
 }

@@ -42,6 +42,7 @@ export const weapons = {
     cost: 2,
     price: 0,
     reload: 2.35,
+    aimFov: 41,
   },
   mg3: {
     name: 'MG3 重機槍',
@@ -53,6 +54,7 @@ export const weapons = {
     cost: 2,
     price: 450,
     reload: 4.8,
+    aimFov: 49,
   },
 };
 
@@ -121,7 +123,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   const s = T.MathUtils.smoothstep,
     lerp = T.MathUtils.lerp;
   function equip(id) {
-    if (id === 'mg3' && !rigs.mg3) rigs.mg3 = installMachineGun(bodies.mg3, machineArms, detailMap);
+    if (id === 'mg3' && !rigs.mg3) rigs.mg3 = installMachineGun(bodies.mg3, machineArms);
     selected = id;
     flash.clear();
   }
@@ -211,7 +213,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     scene.environment = worldScene.environment;
-    scene.environmentIntensity = machineGun ? 0.56 : current === 'knife' ? 0.67 : 0.96;
+    scene.environmentIntensity = machineGun ? 0.84 : current === 'knife' ? 0.67 : 0.96;
     if (current !== 'pistol') {
       // Keep reflections anchored to the map as the weapon turns in the player's hands.
       worldCamera.getWorldQuaternion(cameraInverse).invert();
@@ -229,7 +231,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
       root.rotation.set(0, 0, 0);
       rig.update(dt, grounded ? moving : 0, aspect, steerX, steerY, stride);
     } else if (current === selected) {
-      if (current !== 'rifle') ads = 0;
+      if (!longGun) ads = 0;
       rig.pose(phase, empty, cycle, ads, rounds);
       const freedom = 1 - ads,
         narrow = Math.min(1, aspect / 1.4);
@@ -241,11 +243,11 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
           freedom * Math.abs(Math.cos(time * 9)) * 0.006 * moving +
           (longGun ? 0.084 : 0.062) * tilt +
           0.012 * (s(phase, 0.64, 0.67) - s(phase, 0.67, 0.75)),
-        lerp(machineGun ? -0.545 : longGun ? lerp(-0.505, -0.472, wide) : -0.385, -0.149 * gunScale, ads) +
+        lerp(machineGun ? -0.545 : longGun ? lerp(-0.505, -0.472, wide) : -0.385, (machineGun ? -0.29 : -0.149) * gunScale, ads) +
           recoil * 0.026 - (longGun ? 0.14 : 0.09) * tilt,
       );
       root.rotation.set(
-        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(0.089, 0.028, ads) + tilt * 0.18 + steerY * freedom,
+        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(0.089, machineGun ? 0.009 : 0.028, ads) + tilt * 0.18 + steerY * freedom,
         freedom * (longGun ? 0.139 * narrow : 0.055) + steerX * freedom + tilt * 0.34,
         tilt * 0.25 +
           recoil * roll +

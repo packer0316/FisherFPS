@@ -79,6 +79,7 @@ async function boot() {
     reloadDuration = 0;
   let scoped = false,
     aimTravel = 0,
+    aimFov = camera.fov,
     ads = 0,
     reloadEmpty = false,
     rightDrag = 0;
@@ -87,15 +88,17 @@ async function boot() {
     $('scope-btn').setAttribute('aria-pressed', String(on));
   }
   function toggleScope() {
-    if (mode === 'play' && economy.weapon === 'rifle' && reloadLeft <= 0) setScope(!scoped);
+    if (mode === 'play' && weapon().aimFov && reloadLeft <= 0) setScope(!scoped);
   }
   function updateScope(dt) {
     const target = scoped && view.isReady() ? 1 : 0;
+    // Keep the outgoing sight's field of view while lowering it to switch weapons.
+    if (target) aimFov = weapon().aimFov;
     aimTravel += Math.sign(target - aimTravel) * Math.min(Math.abs(target - aimTravel), dt / 0.245);
     const next = T.MathUtils.smoothstep(aimTravel, 0, 1);
     if (next === ads) return;
     ads = next;
-    camera.fov = T.MathUtils.lerp(65, 41, ads);
+    camera.fov = T.MathUtils.lerp(65, aimFov, ads);
     camera.updateProjectionMatrix();
     $('reticle').style.opacity = String(1 - T.MathUtils.smoothstep(ads, 0.04, 0.62));
   }
@@ -192,7 +195,7 @@ async function boot() {
     $('auto-label').textContent = knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
     $('weapon-name').textContent = weapon().name;
     $('cost').textContent = knife ? '近戰距離 2.5 公尺' : weapon().cost + ' 幣 / 發';
-    $('scope-btn').hidden = economy.weapon !== 'rifle';
+    $('scope-btn').hidden = !weapon().aimFov;
     const weaponIcon = $('weapon-icon');
     if (weaponIcon.dataset.weapon !== economy.weapon) {
       weaponIcon.innerHTML = gunIcon(economy.weapon);

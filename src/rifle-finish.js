@@ -2,7 +2,7 @@ import * as T from 'three';
 
 // Distances to real creases, in the rifle's authored units. Coplanar triangle
 // diagonals and concave seams don't get a silver outline when the gun catches light.
-function creaseGeometry(source, points) {
+export function creaseGeometry(source, points, attribute = 'akEdge') {
   const index = source.index?.array;
   const count = index ? index.length : points.length;
   const welded = new Map(), edges = new Map();
@@ -38,7 +38,7 @@ function creaseGeometry(source, points) {
     }
   }
   const geometry = index ? source.toNonIndexed() : source;
-  geometry.setAttribute('akEdge', new T.BufferAttribute(distance, 3));
+  geometry.setAttribute(attribute, new T.BufferAttribute(distance, 3));
   return geometry;
 }
 
