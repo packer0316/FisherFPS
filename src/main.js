@@ -1,0 +1,843 @@
+import './style.css';
+import * as T from 'three';
+import { makeWorld, spawn } from './world.js';
+import { makeViewmodel, startingWeapon, weapons } from './weapons.js';
+import { makeEffects } from './effects.js';
+import { loadCombatParticles } from './combat-particles.js';
+import { loadHunt } from './hunt.js';
+import { loadRewardCoins } from './reward-coins.js';
+import { $, gunIcon, makeRadar } from './ui.js';
+import { emit } from './events.js';
+
+async function boot() {
+  const canvas = $('world'),
+    coarse = matchMedia('(pointer:coarse)').matches;
+  const renderer = new T.WebGLRenderer({
+    canvas,
+    antialias: true,
+    alpha: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.35 : 1.7));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.99;
+  renderer.autoClear = false;
+  const scene = new T.Scene(),
+    camera = new T.PerspectiveCamera(65, 1, 0.14, 220);
+  camera.rotation.order = 'YXZ';
+  const player = { x: spawn.x, z: spawn.z, yaw: -0.122, pitch: 0.053 };
+  const world = makeWorld(scene, renderer, coarse);
+  const [hunt, particles, view, rewardCoins] = await Promise.all([
+    loadHunt(scene, world),
+    loadCombatParticles(renderer, $('wallet-pickup')),
+    makeViewmodel(scene, camera, world.sun),
+    loadRewardCoins(scene, world, camera, coarse),
+  ]);
+  const fx = makeEffects(scene, particles.playBlood),
+    radar = makeRadar(world, player);
+  const economy = {
+    wallet: 1000,
+    kills: 0,
+    wave: 1,
+    owned: new Set([startingWeapon, 'pistol', 'knife']),
+    weapon: startingWeapon,
+    ammo: { pistol: weapons.pistol.mag, rifle: weapons.rifle.mag },
+  };
+  const keys = new Set(),
+    stick = { x: 0, y: 0 },
+    aim = new T.Vector3(),
+    muzzle = new T.Vector3(),
+    screen = new T.Vector3();
+  let mode = 'ready',
+    shopReturn = 'ready',
+    lock = null,
+    clock = 0,
+    shotTime = 0,
+    reloadLeft = 0,
+    steering = 0,
+    swayX = 0,
+    swayY = 0;
+  let scanLeft = 0,
+    uiLeft = 0,
+    flashLeft = 0,
+    rewardLeft = 0,
+    toastLeft = 0,
+    moving = 0,
+    walkPhase = 0,
+    last = performance.now(),
+    slow = 0,
+    readyToScale = 3;
+  let meleeContact = 0,
+    reloadDuration = 0;
+  let scoped = false,
+    aimTravel = 0,
+    ads = 0,
+    reloadEmpty = false,
+    rightDrag = 0;
+  function setScope(on) {
+    scoped = on;
+    $('scope-btn').setAttribute('aria-pressed', String(on));
+  }
+  function toggleScope() {
+    if (mode === 'play' && economy.weapon === 'rifle' && reloadLeft <= 0) setScope(!scoped);
+  }
+  function updateScope(dt) {
+    const target = scoped && view.isReady() ? 1 : 0;
+    aimTravel += Math.sign(target - aimTravel) * Math.min(Math.abs(target - aimTravel), dt / 0.245);
+    const next = T.MathUtils.smoothstep(aimTravel, 0, 1);
+    if (next === ads) return;
+    ads = next;
+    camera.fov = T.MathUtils.lerp(65, 41, ads);
+    camera.updateProjectionMatrix();
+    $('reticle').style.opacity = String(1 - T.MathUtils.smoothstep(ads, 0.04, 0.62));
+  }
+  let autoFire = false,
+    triggerHeld = false,
+    triggerTap = false;
+  const gravity = 9.81, standingHeight = 1.84, crouchedHeight = 1.23;
+  let feet = world.terrainHeight(player.x, player.z),
+    verticalSpeed = 0,
+    grounded = true,
+    bodyHeight = standingHeight,
+    tuckInAir = false,
+    touchCrouch = false,
+    jumpQueued = false,
+    airbornePace = 5.25,
+    stepOffset = 0,
+    landingTime = 0,
+    landingDip = 0;
+  let kickPitch = 0,
+    kickYaw = 0;
+  const shotDirection = new T.Vector3();
+  const mag = () => economy.ammo[economy.weapon],
+    weapon = () => weapons[economy.weapon];
+  function alignWallet() {
+    rewardCoins.setWalletTarget($('wallet-anchor').getBoundingClientRect(), canvas.getBoundingClientRect());
+  }
+  function resize() {
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    alignWallet();
+  }
+  // Font loading and responsive HUD layouts can also move the icon without a viewport resize.
+  const walletObserver = new ResizeObserver(alignWallet);
+  walletObserver.observe($('wallet-anchor').closest('.vitals'));
+  addEventListener('resize', resize);
+  resize();
+  function cameraPose() {
+    camera.position.set(
+      player.x,
+      feet + bodyHeight - (standingHeight - spawn.y) + stepOffset
+        - landingDip * Math.sin(Math.PI * landingTime / 0.20)
+        + (grounded ? Math.sin(walkPhase) * 0.025 * moving : 0),
+      player.z,
+    );
+    camera.rotation.set(player.pitch + kickPitch, player.yaw + kickYaw, 0, 'YXZ');
+    camera.updateMatrixWorld(true);
+  }
+  function notice(text) {
+    $('toast').textContent = text;
+    $('toast').style.display = 'block';
+    toastLeft = 2.6;
+  }
+  function sync() {
+    $('wallet').textContent = economy.wallet.toLocaleString('en-US');
+    $('kills').textContent = String(economy.kills).padStart(2, '0');
+    $('wave').textContent = String(economy.wave).padStart(2, '0');
+    const knife = economy.weapon === 'knife';
+    $('ammo').textContent = knife ? '近戰' : String(mag()).padStart(2, '0');
+    $('capacity').parentElement.hidden = knife;
+    $('capacity').textContent = weapon().mag ?? '';
+    $('reload-btn').hidden = knife;
+    $('auto-btn').disabled = knife;
+    $('auto-btn').setAttribute('aria-pressed', String(!knife && autoFire));
+    $('auto-label').textContent = knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
+    $('weapon-name').textContent = weapon().name;
+    $('cost').textContent = knife ? '近戰距離 2.5 公尺' : weapon().cost + ' 幣 / 發';
+    $('scope-btn').hidden = economy.weapon !== 'rifle';
+    $('weapon-icon').innerHTML = gunIcon(economy.weapon);
+    $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
+  }
+  function stopInput() {
+    keys.clear();
+    jumpQueued = touchCrouch = false;
+    $('crouch-btn').setAttribute('aria-pressed', 'false');
+    triggerHeld = triggerTap = false;
+    stick.x = stick.y = 0;
+    $('stick').firstElementChild.style.transform = '';
+    moving = 0;
+  }
+  function setMode(next) {
+    mode = next;
+    if (next !== 'play') setScope(false);
+    stopInput();
+    lock = null;
+    scanLeft = 0;
+    $('app').classList.toggle('playing', next === 'play');
+    alignWallet();
+    $('brief').hidden = next === 'play' || next === 'shop';
+    $('shop').hidden = next !== 'shop';
+    $('session-status').textContent = {
+      ready: '待命中',
+      pause: '已暫停',
+      play: '獵殺進行中',
+      shop: '軍械整備中',
+    }[next];
+    $('deploy').querySelector('strong').textContent = next === 'pause' ? '繼續獵殺' : '進入獵場';
+    $('brief').querySelector('h1').innerHTML =
+      next === 'pause' ? '行動暫停<span>.</span>' : '沙境獵場<span>.</span>';
+    if (next !== 'play' && document.pointerLockElement === canvas) document.exitPointerLock();
+  }
+  let dragFallback = false;
+  async function deploy() {
+    if (mode === 'play') return;
+    setMode('play');
+    emit('hunt:resume', { wave: economy.wave });
+    if (!coarse) {
+      try {
+        if (!canvas.requestPointerLock) throw Error('unsupported');
+        await canvas.requestPointerLock();
+        dragFallback = false;
+      } catch {
+        dragFallback = true;
+        notice('按住滑鼠右鍵拖曳轉向，左鍵射擊');
+      }
+    }
+  }
+  function pause() {
+    if (mode === 'play') {
+      setMode('pause');
+      emit('hunt:pause');
+    }
+  }
+  function equip(id) {
+    if (!economy.owned.has(id)) {
+      notice('可在軍械商店購買' + weapons[id].name);
+      return;
+    }
+    if (economy.weapon === id) return;
+    triggerHeld = triggerTap = false;
+    setScope(false);
+    meleeContact = 0;
+    lock = null;
+    economy.weapon = id;
+    reloadLeft = 0;
+    reloadEmpty = false;
+    view.equip(id);
+    sync();
+    emit('weapon:equip', { weapon: id });
+  }
+  function stock() {
+    $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
+    $('stock').innerHTML = Object.entries(weapons)
+      .map(([id, w]) => {
+        const owned = economy.owned.has(id),
+          equipped = economy.weapon === id,
+          disabled = equipped || (!owned && economy.wallet < w.price);
+        const label = equipped
+          ? '裝備中'
+          : owned
+            ? '裝備'
+            : economy.wallet < w.price
+              ? '賞金不足'
+              : '購買　' + w.price;
+        return (
+          '<article class="stock">' +
+          gunIcon(id) +
+          '<div><h3>' +
+          w.name +
+          '</h3><small>' +
+          w.family +
+          (id === startingWeapon ? ' · 初始配發' : '') +
+          (id === 'knife' ? ' · 配發' : ' · ' + w.mag + ' 發彈匣') +
+          '</small><span class="spec">' +
+          w.damage +
+          ' 傷害　/　' +
+          (id === 'knife' ? '近戰 2.5 公尺' : w.cost + ' 幣每發') +
+          '</span></div><button data-buy="' +
+          id +
+          '" ' +
+          (disabled ? 'disabled' : '') +
+          '>' +
+          label +
+          '</button></article>'
+        );
+      })
+      .join('');
+    $('grant').hidden = economy.wallet >= 2;
+  }
+  function openShop() {
+    if (mode === 'shop') return closeShop();
+    shopReturn = mode;
+    setMode('shop');
+    stock();
+    emit('shop:open');
+  }
+  function closeShop() {
+    if (shopReturn === 'play') deploy();
+    else setMode(shopReturn);
+  }
+  $('shop-btn').onclick = openShop;
+  $('close-shop').onclick = closeShop;
+  $('deploy').onclick = deploy;
+  $('shop').addEventListener('click', (e) => {
+    if (e.target === $('shop')) closeShop();
+  });
+  $('stock').addEventListener('click', (e) => {
+    const id = e.target.closest('button')?.dataset.buy;
+    if (!weapons[id]) return;
+    if (!economy.owned.has(id)) {
+      if (economy.wallet < weapons[id].price) return;
+      economy.wallet -= weapons[id].price;
+      economy.owned.add(id);
+      emit('shop:purchase', { weapon: id, price: weapons[id].price });
+    }
+    equip(id);
+    stock();
+  });
+  $('grant').onclick = () => {
+    if (economy.wallet < 2) {
+      economy.wallet += 100;
+      sync();
+      stock();
+      emit('wallet:resupply', { amount: 100 });
+    }
+  };
+  $('full-btn').onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      notice('此瀏覽器無法切換全螢幕');
+    }
+  };
+  function reload() {
+    if (mode !== 'play' || economy.weapon === 'knife' || reloadLeft > 0 || !view.isReady()) return;
+    setScope(false);
+    reloadEmpty = mag() === 0;
+    reloadDuration = weapon().reload * (reloadEmpty ? 1 : 0.86);
+    reloadLeft = reloadDuration;
+    emit('weapon:reload', { weapon: economy.weapon });
+  }
+  function toggleAuto() {
+    if (economy.weapon === 'knife') return;
+    autoFire = !autoFire;
+    lock = null;
+    scanLeft = 0;
+    $('auto-btn').setAttribute('aria-pressed', String(autoFire));
+    $('auto-label').textContent = autoFire ? '自動射擊：開' : '自動射擊：關';
+    ui();
+  }
+  function jump() {
+    if (mode === 'play' && grounded) jumpQueued = true;
+  }
+  function pressTrigger() {
+    if (mode !== 'play') return;
+    triggerHeld = true;
+    triggerTap = true;
+  }
+  function releaseTrigger() {
+    triggerHeld = false;
+  }
+  $('auto-btn').onclick = toggleAuto;
+  $('scope-btn').onclick = toggleScope;
+  $('jump-btn').onpointerdown = jump;
+  $('crouch-btn').onpointerdown = () => {
+    if (mode !== 'play') return;
+    touchCrouch = !touchCrouch;
+    $('crouch-btn').setAttribute('aria-pressed', String(touchCrouch));
+  };
+  $('fire-btn').addEventListener('pointerdown', (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pressTrigger();
+  });
+  $('fire-btn').addEventListener('lostpointercapture', releaseTrigger);
+  document.addEventListener('mousedown', (e) => {
+    if (
+      e.button === 2 &&
+      mode === 'play' &&
+      (e.target === canvas || document.pointerLockElement === canvas)
+    ) {
+      rightDrag = 0;
+      if (!dragFallback) toggleScope();
+    }
+    if (
+      e.button === 0 &&
+      (document.pointerLockElement === canvas || (!coarse && e.target === canvas))
+    )
+      pressTrigger();
+  });
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 0) releaseTrigger();
+    if (e.button === 2 && dragFallback && e.target === canvas && rightDrag < 5) toggleScope();
+  });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('reload-btn').onclick = reload;
+  $('pause-btn').onclick = pause;
+  canvas.addEventListener('click', () => {
+    if (mode === 'ready' || mode === 'pause') deploy();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement && mode === 'play' && !coarse && !dragFallback) pause();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pause();
+    last = performance.now();
+  });
+  window.addEventListener('blur', pause);
+  addEventListener('keydown', (e) => {
+    if (
+      [
+        'KeyW',
+        'KeyA',
+        'KeyS',
+        'KeyD',
+        'KeyB',
+        'KeyR',
+        'Digit1',
+        'Digit2',
+        'Digit3',
+        'Escape',
+        'Space',
+        'ControlLeft',
+        'ControlRight',
+      ].includes(e.code)
+    )
+      e.preventDefault();
+    if (!e.repeat) {
+      if (e.code === 'KeyB') return openShop();
+      if (e.code === 'Escape') {
+        if (mode === 'shop') closeShop();
+        else pause();
+        return;
+      }
+      if (e.code === 'Enter' && mode !== 'shop' && document.activeElement?.tagName !== 'BUTTON')
+        deploy();
+      if (mode === 'play') {
+        if (e.code === 'KeyF') toggleAuto();
+        if (e.code === 'Space') jump();
+        if (e.code === 'KeyR') reload();
+        if (e.code === 'Digit1') equip('rifle');
+        if (e.code === 'Digit2') equip('pistol');
+        if (e.code === 'Digit3') equip('knife');
+      }
+    }
+    if (mode === 'play') keys.add(e.code);
+  });
+  addEventListener('keyup', (e) => keys.delete(e.code));
+  function look(dx, dy, sens) {
+    sens *= T.MathUtils.lerp(1, 0.59, ads);
+    player.yaw -= dx * sens;
+    player.pitch = T.MathUtils.clamp(player.pitch - dy * sens, -1.24, 1.24);
+    swayX = T.MathUtils.clamp(swayX + dx * 0.0006, -0.055, 0.055);
+    swayY = T.MathUtils.clamp(swayY + dy * 0.0004, -0.035, 0.035);
+    if (Math.abs(dx) + Math.abs(dy) > 1) steering = 0.2;
+  }
+  document.addEventListener('mousemove', (e) => {
+    if (dragFallback && e.buttons & 2) rightDrag += Math.abs(e.movementX) + Math.abs(e.movementY);
+    if (
+      mode === 'play' &&
+      (document.pointerLockElement === canvas || (dragFallback && e.buttons & 2))
+    )
+      look(e.movementX, e.movementY, 0.002);
+  });
+  function touchPad(id, handler, release) {
+    const el = $(id);
+    let pointer = null,
+      lastX,
+      lastY;
+    el.addEventListener('pointerdown', (e) => {
+      if (pointer !== null || mode !== 'play') return;
+      pointer = e.pointerId;
+      el.setPointerCapture(pointer);
+      lastX = e.clientX;
+      lastY = e.clientY;
+      handler(e, 0, 0);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (pointer !== e.pointerId) return;
+      handler(e, e.clientX - lastX, e.clientY - lastY);
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+    const end = (e) => {
+      if (pointer === e.pointerId) {
+        pointer = null;
+        release();
+      }
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+  }
+  touchPad(
+    'look-pad',
+    (e, dx, dy) => look(dx, dy, 0.0042),
+    () => {},
+  );
+  touchPad(
+    'stick',
+    (e) => {
+      const b = $('stick').getBoundingClientRect(),
+        x = (e.clientX - b.left - b.width / 2) / (b.width * 0.38),
+        y = (e.clientY - b.top - b.height / 2) / (b.height * 0.38);
+      const l = Math.max(1, Math.hypot(x, y));
+      stick.x = x / l;
+      stick.y = y / l;
+      $('stick').firstElementChild.style.transform =
+        'translate(' + stick.x * b.width * 0.27 + 'px,' + stick.y * b.width * 0.27 + 'px)';
+    },
+    () => {
+      stick.x = stick.y = 0;
+      $('stick').firstElementChild.style.transform = '';
+    },
+  );
+  function movement(dt) {
+    const crouch = touchCrouch || keys.has('ControlLeft') || keys.has('ControlRight');
+    const previousHeight = bodyHeight;
+    const { ceiling: standLimit } = world.verticalLimits(player.x, player.z, feet, bodyHeight);
+    const low = crouch || feet + standingHeight > standLimit + bodyHeight + 0.002;
+    const desiredHeight = low ? crouchedHeight : standingHeight;
+    bodyHeight += T.MathUtils.clamp(desiredHeight - bodyHeight, -dt * 4.5, dt * 3.8);
+    const running =
+      keys.has('ShiftLeft') || keys.has('ShiftRight') || Math.hypot(stick.x, stick.y) > 0.93;
+    const pace = low ? 2.65 : running ? 7.9 : 5.25;
+    if (grounded) airbornePace = jumpQueued && bodyHeight > 1.70 ? (running ? 7.9 : 5.25) : pace;
+    if (jumpQueued && grounded) {
+      // A single takeoff impulse; after leaving the floor gravity controls the entire arc.
+      verticalSpeed = crouch ? 5.25 : 4.0;
+      tuckInAir = !crouch && previousHeight >= standingHeight - 0.002;
+      grounded = false;
+    }
+    jumpQueued = false;
+    let x = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + stick.x,
+      z = Number(keys.has('KeyS')) - Number(keys.has('KeyW')) + stick.y;
+    const length = Math.hypot(x, z);
+    moving = Math.min(1, length);
+    x /= Math.max(1, length);
+    z /= Math.max(1, length);
+    const c = Math.cos(player.yaw),
+      s = Math.sin(player.yaw),
+      step = dt * (grounded ? pace : airbornePace);
+    const nx = player.x + (x * c + z * s) * step,
+      nz = player.z + (-x * s + z * c) * step;
+    const stepHeight = grounded ? 0.24 : 0.002;
+    if (nx !== player.x && !world.blocked(nx, player.z, 0.32, feet, bodyHeight, stepHeight)) player.x = nx;
+    if (nz !== player.z && !world.blocked(player.x, nz, 0.32, feet, bodyHeight, stepHeight)) player.z = nz;
+    walkPhase += step * moving * 1.85;
+    const { floor, ceiling } = world.verticalLimits(player.x, player.z, feet, bodyHeight);
+    stepOffset *= Math.exp(-16 * dt);
+    landingTime = Math.max(0, landingTime - dt);
+    if (grounded && Math.abs(floor - feet) <= 0.241) {
+      // Keep the hull on the stairs and ease only the camera over an individual riser.
+      if (Math.abs(floor - feet) > 0.045) stepOffset = T.MathUtils.clamp(stepOffset + feet - floor, -0.19, 0.19);
+      feet = floor;
+      return;
+    }
+    // On a standing takeoff, pulling the knees up raises the soles while the eyes
+    // stay on the ballistic arc. Extending again gives exactly that clearance back.
+    const tuckTravel = !grounded && tuckInAir ? previousHeight - bodyHeight : 0;
+    const next = feet + tuckTravel + verticalSpeed * dt - 0.5 * gravity * dt * dt;
+    verticalSpeed -= gravity * dt;
+    grounded = next <= floor && (verticalSpeed <= 0 || tuckTravel < 0);
+    if (grounded) {
+      feet = floor;
+      tuckInAir = false;
+      landingDip = Math.min(0.085, Math.max(0, -verticalSpeed - 2) * 0.018);
+      landingTime = 0.20;
+      verticalSpeed = 0;
+    } else if (next >= ceiling && verticalSpeed > 0) {
+      feet = ceiling;
+      verticalSpeed = 0;
+    } else feet = next;
+  }
+  function fire(automatic = false) {
+    if (!view.isReady()) return;
+    if (economy.weapon === 'knife') {
+      if (automatic || shotTime > 0) return;
+      shotTime = weapon().delay;
+      meleeContact = weapon().contactTime;
+      view.shoot();
+      emit('weapon:swing', { weapon: 'knife' });
+      return;
+    }
+    if (reloadLeft > 0 || shotTime > 0 || mag() <= 0 || economy.wallet < weapon().cost) return;
+    camera.getWorldDirection(shotDirection);
+    if (automatic) {
+      if (!lock?.alive || !hunt.inSight(camera, lock, aim)) return;
+      shotDirection.subVectors(aim, camera.position).normalize();
+    }
+    const hit = hunt.traceShot(camera.position, shotDirection);
+    if (automatic && !hit.enemy) return;
+    const cost = weapon().cost;
+    economy.ammo[economy.weapon]--;
+    economy.wallet -= cost;
+    shotTime = weapon().delay;
+    view.muzzleOrigin(camera, muzzle);
+    view.shoot();
+    kickPitch = Math.min(0.055, kickPitch + (economy.weapon === 'rifle' ? 0.013 : 0.023));
+    kickYaw = T.MathUtils.clamp(kickYaw + (Math.random() - 0.5) * 0.012, -0.02, 0.02);
+    fx.shot(muzzle, hit, economy.weapon);
+    emit('weapon:fire', {
+      weapon: economy.weapon,
+      origin: muzzle.toArray(),
+      target: hit.position.toArray(),
+      cost,
+    });
+    if (hit.enemy) damageEnemy(hit.enemy, hit.position);
+    else if (hit.kind !== 'air') {
+      emit('world:impact', { kind: hit.kind, position: hit.position.toArray() });
+      if (hit.kind === 'wall') {
+        economy.wallet += cost;
+        $('reward').textContent = '牆面退款 +' + cost;
+        rewardLeft = 0.7;
+        emit('wallet:refund', { amount: cost, weapon: economy.weapon });
+      }
+    }
+    sync();
+    if (economy.wallet < weapon().cost) notice('賞金不足，可按 B 開啟商店整備');
+  }
+  const prizeOrigin = new T.Vector3();
+  function damageEnemy(e, position) {
+    if (!e.alive) return;
+    flashLeft = 0.13;
+    e.hp -= weapon().damage;
+    prizeOrigin.set(e.root.position.x, e.groundY, e.root.position.z);
+    e.root.rotation.z = (Math.random() > 0.5 ? 1 : -1) * 0.11;
+    emit('target:hit', {
+      species: e.type.id,
+      position: position.toArray(),
+      damage: weapon().damage,
+    });
+    if (e.hp <= 0) {
+      hunt.kill(e);
+      economy.wallet += e.type.reward;
+      rewardCoins.burst(prizeOrigin, Boolean(e.type.smallPrize));
+      economy.kills++;
+      lock = null;
+      scanLeft = 0;
+      $('reward').textContent = '+ ' + e.type.reward + ' 賞金';
+      rewardLeft = 1.1;
+      emit('target:kill', {
+        species: e.type.id,
+        position: e.root.position.toArray(),
+        reward: e.type.reward,
+      });
+      if (economy.kills % hunt.enemies.length === 0) {
+        economy.wave++;
+        notice('獵殺進入第 ' + economy.wave + ' 波');
+        emit('hunt:wave', { wave: economy.wave });
+      }
+    } else if (e.type.smallPrize && Math.random() < 0.20) {
+      const amount = e.type.smallPrize;
+      economy.wallet += amount;
+      rewardCoins.burst(prizeOrigin, false);
+      $('reward').textContent = '小獎 +' + amount;
+      rewardLeft = 1.1;
+      emit('target:smallPrize', { species: e.type.id, amount, position: e.root.position.toArray() });
+    }
+  }
+  const knifeRay = new T.Vector3();
+  function meleeHit() {
+    camera.getWorldDirection(shotDirection);
+    const center = hunt.traceShot(camera.position, shotDirection, weapon().reach);
+    if (center.kind !== 'air') return center;
+    for (const angle of [-0.105, 0.105]) {
+      knifeRay.copy(shotDirection).applyAxisAngle(T.Object3D.DEFAULT_UP, angle);
+      const edge = hunt.traceShot(camera.position, knifeRay, weapon().reach);
+      if (edge.enemy) return edge;
+    }
+    return center;
+  }
+  function aimAndFire(dt) {
+    shotTime -= dt;
+    scanLeft -= dt;
+    steering -= dt;
+    if (reloadLeft > 0) {
+      reloadLeft -= dt;
+      if (reloadLeft <= 0) {
+        reloadLeft = 0;
+        economy.ammo[economy.weapon] = weapon().mag;
+        sync();
+        emit('weapon:ready', { weapon: economy.weapon });
+      }
+    }
+    if (triggerTap || (triggerHeld && economy.weapon !== 'pistol')) fire();
+    triggerTap = triggerTap && triggerHeld && !view.isReady();
+    if (meleeContact > 0) {
+      meleeContact -= dt;
+      if (meleeContact <= 0 && economy.weapon === 'knife') {
+        const hit = meleeHit();
+        if (hit.kind !== 'air') view.meleeImpact();
+        if (hit.enemy) {
+          particles.playBlood(hit.position, hit.normal);
+          damageEnemy(hit.enemy, hit.position);
+          sync();
+        } else if (hit.kind !== 'air')
+          emit('world:impact', { kind: hit.kind, position: hit.position.toArray() });
+      }
+    }
+    if (!autoFire || economy.weapon === 'knife') return;
+    if (scanLeft <= 0) {
+      lock = hunt.select(camera, lock);
+      scanLeft = 0.105;
+    }
+    if (!lock || !lock.alive) return;
+    hunt.aimPoint(lock, aim);
+    screen.copy(aim).project(camera);
+    if (Math.abs(screen.x) > 1 || Math.abs(screen.y) > 1 || screen.z > 1 || screen.z < -1) {
+      lock = null;
+      return;
+    }
+    const dx = aim.x - player.x,
+      dz = aim.z - player.z,
+      desiredYaw = Math.atan2(-dx, -dz);
+    const desiredPitch = Math.atan2(aim.y - camera.position.y, Math.hypot(dx, dz));
+    if (steering <= 0) {
+      const k = 1 - Math.exp(-5.8 * dt);
+      player.yaw +=
+        Math.atan2(Math.sin(desiredYaw - player.yaw), Math.cos(desiredYaw - player.yaw)) * k;
+      player.pitch += (desiredPitch - player.pitch) * k;
+      cameraPose();
+    }
+    screen.copy(aim).project(camera);
+    if (!reloadLeft && shotTime <= 0 && Math.hypot(screen.x * camera.aspect, screen.y) < 0.095)
+      fire(true);
+  }
+  const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const ticks = Array.from({ length: 13 }, () => {
+    const b = document.createElement('b');
+    $('bearings').appendChild(b);
+    return b;
+  });
+  function ui() {
+    radar(hunt.enemies);
+    $('location').textContent = world.district(player.x, player.z, feet);
+    let bearing = T.MathUtils.euclideanModulo(-T.MathUtils.radToDeg(player.yaw), 360),
+      center = Math.round(bearing / 15);
+    const width = $('bearings').clientWidth;
+    ticks.forEach((tick, i) => {
+      const d = (center + i - 6) * 15,
+        deg = T.MathUtils.euclideanModulo(d, 360);
+      tick.textContent = deg % 45 === 0 ? labels[deg / 45] : deg;
+      tick.classList.toggle('cardinal', deg % 90 === 0);
+      tick.style.left = width / 2 + ((d - bearing) * width) / 126 + 'px';
+    });
+    $('aim-status').textContent =
+      economy.weapon === 'knife'
+        ? '近戰'
+        : reloadLeft
+          ? '換彈中'
+          : lock
+            ? '目標已鎖定'
+            : autoFire
+              ? '自動搜尋中'
+              : '手動射擊';
+    $('app').classList.toggle('locked', !!lock);
+    $('enemyhud').style.display = 'none';
+    if (mode === 'play' && lock?.alive && hunt.inSight(camera, lock, aim)) {
+      screen.copy(lock.root.position);
+      screen.y += lock.height + 0.19;
+      screen.project(camera);
+      const el = $('enemyhud');
+      el.style.display = 'block';
+      el.style.left = (screen.x * 0.5 + 0.5) * innerWidth + 'px';
+      el.style.top = (-screen.y * 0.5 + 0.5) * innerHeight + 'px';
+      $('enemy-name').textContent = lock.type.name;
+      $('enemy-health').style.width = (100 * lock.hp) / lock.maxHp + '%';
+    }
+  }
+  cameraPose();
+  hunt.populate(camera);
+  sync();
+  setMode('ready');
+  ui();
+  await renderer.compileAsync(scene, camera);
+  $('loading').hidden = true;
+  let shadowLeft = 0;
+  function frame(now) {
+    const real = (now - last) / 1000,
+      dt = Math.min(0.06, Math.max(0, real));
+    last = now;
+    if (document.hidden) return;
+    clock += dt;
+    updateScope(dt);
+    const playing = mode === 'play';
+    if (playing) {
+      const elapsed = Math.min(0.12, Math.max(0, real));
+      const steps = Math.ceil(elapsed * 120);
+      for (let i = 0; i < steps; i++) movement(elapsed / steps);
+      kickPitch *= Math.exp(-dt * 12);
+      kickYaw *= Math.exp(-dt * 14);
+      cameraPose();
+    }
+    if (playing || mode === 'ready') {
+      world.breeze.value += dt;
+      hunt.update(dt, clock, playing, camera, economy.wave);
+    }
+    if (playing) {
+      aimAndFire(dt);
+      // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
+      if (mag() === 0 && reloadLeft === 0) reload();
+    }
+    fx.update(playing ? dt : 0);
+    if (playing) {
+      rewardCoins.update(dt, particles.playCoinPickup);
+      particles.update(dt);
+    }
+    uiLeft -= dt;
+    if (uiLeft <= 0) {
+      ui();
+      uiLeft = 0.095;
+    }
+    flashLeft -= dt;
+    rewardLeft -= dt;
+    toastLeft -= dt;
+    $('hitmark').style.opacity = String(Math.max(0, flashLeft * 8));
+    $('reward').style.opacity = String(Math.max(0, Math.min(1, rewardLeft * 2)));
+    if (toastLeft <= 0) $('toast').style.display = 'none';
+    swayX *= Math.exp(-dt * 10);
+    swayY *= Math.exp(-dt * 10);
+    shadowLeft -= dt;
+    if (shadowLeft <= 0 && (playing || mode === 'ready')) {
+      world.centerShadow(player.x, player.z);
+      renderer.shadowMap.needsUpdate = true;
+      shadowLeft = coarse ? 0.09 : 0.055;
+    }
+    renderer.clear();
+    renderer.render(scene, camera);
+    particles.render(camera);
+    view.render(
+      renderer,
+      playing || mode === 'ready' ? dt : 0,
+      moving,
+      reloadLeft > 0 ? 1 - reloadLeft / reloadDuration : 0,
+      reloadEmpty,
+      ads,
+      swayX,
+      swayY,
+      walkPhase,
+      grounded,
+    );
+    if (playing) {
+      slow = real > 0.032 ? slow + dt : Math.max(0, slow - dt * 0.7);
+      readyToScale -= dt;
+      if (slow > 1.5 && readyToScale <= 0 && renderer.getPixelRatio() > 0.8) {
+        renderer.setPixelRatio(Math.max(0.8, renderer.getPixelRatio() * 0.85));
+        resize();
+        slow = 0;
+        readyToScale = 4;
+      }
+    }
+  }
+  renderer.setAnimationLoop(frame);
+}
+boot().catch((error) => {
+  console.error(error);
+  $('load-msg').textContent = '無法載入獵場，請確認 WebGL 與硬體加速已開啟後重新整理。';
+});

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#141b1a" />
+    <title>Dustline｜沙境獵場</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23171d1b'/%3E%3Cpath d='M5 24 15 6h5L10 24zm8 0 9-16 5 8-5 8z' fill='%23ffab4b'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world" aria-label="沙境獵場 3D 遊戲畫面"></canvas>
+      <div class="vignette"></div>
+      <header>
+        <div class="brand">
+          <svg viewBox="0 0 44 34" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M1 29 16 3h8L9 29zm12 0L26 6l4 7-9 16zm12 0 7-12 7 12z"
+            /></svg
+          ><b>DUSTLINE</b>
+        </div>
+        <span class="header-rule"></span><span class="mode"><i></i> 殭屍獵場</span>
+        <div class="top-actions">
+          <button id="auto-btn" aria-pressed="false" title="切換自動射擊 (F)">
+            <span id="auto-label">自動射擊：關</span><kbd>F</kbd>
+          </button>
+          <button id="pause-btn" class="icon-button" aria-label="暫停獵殺">
+            <i data-icon="pause"></i></button
+          ><button id="shop-btn"><i data-icon="shop"></i><span>軍械商店</span><kbd>B</kbd></button
+          ><button id="full-btn" class="icon-button" aria-label="切換全螢幕" title="全螢幕">
+            <i data-icon="expand"></i>
+          </button>
+        </div>
+      </header>
+      <main id="hud">
+        <section id="radar-panel">
+          <div class="radar-frame">
+            <canvas id="radar" width="300" height="230"></canvas><span class="radar-n">N</span>
+          </div>
+          <div class="location">
+            <i data-icon="pin"></i><span id="location">中央市集</span><b>SECTOR 01</b>
+          </div>
+        </section>
+        <div class="compass" aria-label="方位">
+          <div id="bearings"></div>
+          <span class="needle"></span>
+        </div>
+        <div class="wave">
+          <i data-icon="layers"></i>
+          <div>
+            <small>HUNT WAVE</small><strong>獵殺波次 <em id="wave">01</em></strong>
+          </div>
+        </div>
+        <div id="reticle"><i></i><i></i><i></i><i></i><b></b></div>
+        <div id="enemyhud">
+          <span id="enemy-name"></span>
+          <div><b id="enemy-health"></b></div>
+        </div>
+        <div id="hitmark">×</div>
+        <div id="reward"></div>
+        <section id="brief">
+          <div class="operation"><span></span> OPERATION <b>/</b> DUST BAZAAR</div>
+          <h1>沙境獵場<span>.</span></h1>
+          <p>瞄準獵物開火，擊倒領賞。擊中牆面會退還該發費用。</p>
+          <button id="deploy">
+            <i data-icon="crosshair"></i><strong>進入獵場</strong><i data-icon="arrow"></i>
+          </button>
+        </section>
+        <div class="vitals">
+          <div class="stat">
+            <span id="wallet-anchor"><i data-icon="coin"></i><canvas id="wallet-pickup" width="144" height="144" aria-hidden="true"></canvas></span>
+            <div><small>賞金餘額</small><strong id="wallet">1,000</strong></div>
+          </div>
+          <div class="stat kills">
+            <i data-icon="target"></i>
+            <div><small>擊倒數</small><strong id="kills">00</strong></div>
+          </div>
+        </div>
+        <div class="weapon-hud">
+          <div class="weapon-title">
+            <span class="live-dot"></span><small id="aim-status">手動射擊</small>
+          </div>
+          <div class="weapon-row">
+            <i id="weapon-icon"></i><b id="ammo">30</b><span>/ <em id="capacity">30</em></span>
+          </div>
+          <div class="weapon-foot">
+            <strong id="weapon-name">AK-47 突擊步槍</strong><span id="cost">2 幣 / 發</span>
+          </div>
+        </div>
+        <div id="touch">
+          <div id="look-pad"></div>
+          <div id="stick"><b></b></div>
+          <button id="fire-btn" class="combat-btn" aria-label="射擊">
+            <i data-icon="crosshair"></i>
+          </button>
+          <button id="scope-btn" class="combat-btn" hidden aria-label="切換紅點瞄準鏡" aria-pressed="false"><i data-icon="target"></i></button>
+          <button id="jump-btn" class="combat-btn" aria-label="跳躍">跳</button>
+          <button id="crouch-btn" class="combat-btn" aria-label="切換蹲下" aria-pressed="false">蹲</button>
+          <button id="reload-btn" aria-label="換彈"><i data-icon="reload"></i></button>
+        </div>
+        <div id="toast" role="status"></div>
+      </main>
+      <footer>
+        <div><span class="live-dot"></span><b id="session-status">待命中</b></div>
+        <div class="bindings">
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動</span
+          ><span><i data-icon="mouse"></i> 左鍵射擊・右鍵開鏡</span><span><kbd>Shift</kbd> 跑步</span
+          ><span><kbd>Ctrl</kbd> 蹲下</span><span><kbd>Space</kbd> 跳躍</span><span><kbd>R</kbd> 換彈</span
+          ><span><kbd>1</kbd> 步槍 <kbd>2</kbd> 手槍 <kbd>3</kbd> 刀</span><span><kbd>Esc</kbd> 暫停</span>
+        </div>
+        <span class="mobile-legend">搖桿推到底跑步　右側滑動轉向　先蹲再跳可跳更高</span>
+      </footer>
+      <div id="shop" class="overlay" hidden>
+        <section class="shop-window">
+          <div class="shop-head">
+            <div>
+              <div class="operation"><span></span> FIELD ARMORY</div>
+              <h2>軍械商店</h2>
+            </div>
+            <button id="close-shop" class="icon-button" aria-label="關閉商店">
+              <i data-icon="close"></i>
+            </button>
+          </div>
+          <div class="shop-wallet">
+            <span><i data-icon="coin"></i> 可用賞金</span><b id="shop-balance"></b>
+          </div>
+          <div id="stock"></div>
+          <button id="grant" hidden>領取補給金 +100</button>
+        </section>
+      </div>
+      <div id="loading">
+        <div class="brand"><b>DUSTLINE</b></div>
+        <span id="load-msg">正在載入獵場…</span>
+      </div>
+    </div>
+    <script src="/vendor/effekseer/effekseer.min.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

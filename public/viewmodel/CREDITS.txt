@@ -1,0 +1,25 @@
+First-person weapon models
+
+ak47.glb, p226.glb, arms_basecolor.webp and arms_normal.webp are from the first-person rigs distributed by cktang88/3d-fps, revision 130ac2a5c856401ec36e7d35afcfefe40c5801f4. The upstream project adapted, posed, rigged and optimized the assets.
+https://github.com/cktang88/3d-fps/tree/130ac2a5c856401ec36e7d35afcfefe40c5801f4/public/assets/models/fp
+https://github.com/cktang88/3d-fps/blob/130ac2a5c856401ec36e7d35afcfefe40c5801f4/README.md
+
+Gloved arm mesh and textures: “Fps arms” by DJMaesen (bumstrum).
+https://sketchfab.com/3d-models/fps-arms-9452ce4cddde4110a4fd73e555a8e412
+Arm rig and authored hold sources: “FPS AK-74m animations” and “FPS pistol animations” by Cransh (ccransh).
+https://sketchfab.com/3d-models/fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14
+https://sketchfab.com/3d-models/fps-pistol-animations-0d7a343dcb6f401197a73c91aee93f6d
+Pistol mesh: “Sig Sauer P226” by Alexcanot.
+https://sketchfab.com/3d-models/sig-sauer-p226-e3d4f1ab22f342f4a0891743353c114c
+The above Sketchfab works are licensed under Creative Commons Attribution 4.0 International.
+https://creativecommons.org/licenses/by/4.0/
+
+AK rifle: Operation Steel Tide / AetherRadar, original project work under MIT. The upstream rifle sources are credited to nisu, taradavies and Quaternius (CC0). See the accompanying Operation-Steel-Tide-LICENSE.txt.
+https://github.com/AetherRadar/operation-steel-tide
+
+kabar.glb: “Kabar Combat knife” by Gamekorp, CC0 1.0. Converted from the author's FBX, oriented, triangulated and packaged with an optimized texture. FisherFPS lengthened and widened the blade, adjusted its normals and added a blade-tip socket.
+https://opengameart.org/content/kabar-combat-knife
+https://creativecommons.org/publicdomain/zero/1.0/
+
+FisherFPS implements its own view framing, fingertip fitting, arm IK, magazine and bolt choreography, optic, melee swing and lighting. The knife uses both gloves of the credited arm rig, posed at runtime for an open guard and a forward grip.
+
