@@ -53,7 +53,7 @@ export function fitFingers(rig, side, contacts) {
 }
 
 // Work in the rig's own frame so camera sway and aiming transform the whole pose together.
-function supportArm(rig, rifle) {
+export function supportArm(rig, rifle) {
   const find = (n) => rig.getObjectByName(n);
   const upper = find('UpArm_L'),
     lower = find('Forearm_L'),

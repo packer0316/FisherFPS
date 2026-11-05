@@ -46,7 +46,7 @@ export function getSmokeTexture() {
   return (smokeTexture ??= impactTexture(false));
 }
 
-export function makeEffects(scene, playBlood) {
+export function makeEffects(scene, playBlood, rubble = null) {
   const up = new T.Vector3(0, 1, 0),
     forward = new T.Vector3(0, 0, 1);
   const gunLight = new T.PointLight(0xffab58, 0, 8, 2);
@@ -123,7 +123,7 @@ export function makeEffects(scene, playBlood) {
   function impact(hit, power) {
     if (hit.kind === 'air') return;
     if (hit.kind === 'monster') {
-      playBlood(hit.position, hit.normal);
+      playBlood(hit.position, hit.normal, hit.enemy);
       return;
     }
     const wall = hit.kind === 'wall';
@@ -140,6 +140,7 @@ export function makeEffects(scene, playBlood) {
       p.obj.material.color.set(0xc6ad8d);
       p.obj.material.rotation = Math.random() * 6.28;
       p.obj.material.opacity = 0.6;
+      p.peakOpacity = 0.57;
       p.obj.scale.setScalar(0.12);
     }
     for (let i = 0; i < (wall ? 12 : 6); i++) {
@@ -170,23 +171,56 @@ export function makeEffects(scene, playBlood) {
   function shot(from, hit, weapon) {
     gunLight.position.copy(from);
     lightLife = .085;
-    peakLight = weapon === 'rifle' ? 19 : 12;
+    const longGun = weapon === 'rifle' || weapon === 'mg3';
+    peakLight = weapon === 'mg3' ? 23 : longGun ? 19 : 12;
     const t = trails.take();
     t.origin ??= new T.Vector3();
     t.origin.copy(from);
     t.velocity.subVectors(hit.position, from);
     t.distance = t.velocity.length();
     t.velocity.normalize();
-    t.speed = weapon === 'rifle' ? 580 : 370;
+    t.speed = longGun ? 580 : 370;
     t.life = Math.max(0.024, t.distance / t.speed);
     t.hit = hit;
-    t.power = weapon === 'rifle' ? 1.16 : 1;
+    t.power = longGun ? 1.16 : 1;
     t.obj.position.copy(from);
     t.obj.scale.set(1, 0.02, 1);
     t.obj.quaternion.setFromUnitVectors(up, t.velocity);
   }
+  function groundBurst(at, strength, attack, origin) {
+    if (attack) rubble?.burst(at, strength, attack, origin);
+    const count = attack ? 12 : 6;
+    for (let i = 0; i < count; i++) {
+      const angle = (i + Math.random() * 0.65) * 2 * Math.PI / count;
+      const dx = Math.cos(angle), dz = Math.sin(angle);
+      const puff = clouds.take();
+      let x = at.x, z = at.z;
+      let radius = (0.35 + Math.random() * 0.57) * strength;
+      if (attack === 'circle') radius = 2.2 + Math.random() * 1.4;
+      else if (attack) {
+        const along = (i + Math.random()) / count;
+        x = T.MathUtils.lerp(origin.x, at.x, along);
+        z = T.MathUtils.lerp(origin.z, at.z, along);
+      }
+      puff.obj.position.set(x + dx * radius, 0.17, z + dz * radius);
+      puff.velocity.set(dx * 5, 0.65 + Math.random(), dz * 5).multiplyScalar(strength);
+      puff.life = 0.52 + Math.random() * 0.45;
+      puff.size = (2.2 + Math.random() * 1.4) * strength;
+      puff.obj.material.color.set(i % 2 === 0 ? 0x958577 : 0x707b82);
+      puff.obj.material.rotation = Math.random() * Math.PI * 2;
+      puff.obj.material.opacity = puff.peakOpacity = attack ? 0.34 : 0.46;
+      puff.obj.scale.setScalar(0.16);
+      if (attack || i % 2 !== 0) continue;
+      const bit = fragments.take(), size = 0.032 + Math.random() * 0.047;
+      bit.obj.position.copy(puff.obj.position);
+      bit.velocity.set(dx * 2.8, 2 + Math.random() * 2.3, dz * 2.8).multiplyScalar(strength);
+      bit.life = 0.45 + Math.random() * 0.25;
+      bit.obj.scale.set(size * 1.4, size * 0.76, size);
+    }
+  }
   function update(dt) {
     if (dt <= 0) return;
+    rubble?.update(dt);
     gunLight.intensity = peakLight * (lightLife / .085) ** 2;
     lightLife = Math.max(0, lightLife - dt);
     for (const t of trails.entries) {
@@ -217,7 +251,7 @@ export function makeEffects(scene, playBlood) {
           p.velocity.y += 0.9 * dt;
           p.obj.position.addScaledVector(p.velocity, dt);
           p.obj.scale.setScalar(0.12 + p.size * Math.sqrt(t));
-          p.obj.material.opacity = 0.57 * (1 - t) ** 1.5;
+          p.obj.material.opacity = p.peakOpacity * (1 - t) ** 1.5;
         } else if (set === fragments) {
           p.velocity.y -= 9.8 * dt;
           p.obj.position.addScaledVector(p.velocity, dt);
@@ -227,5 +261,10 @@ export function makeEffects(scene, playBlood) {
       }
     }
   }
-  return { shot, update };
+  function clear(){
+    rubble?.clear();
+    for(const set of [trails,clouds,flashes,marks,fragments])for(const p of set.entries)p.obj.visible=false;
+    lightLife=gunLight.intensity=0;
+  }
+  return { shot, update, clear, groundBurst };
 }

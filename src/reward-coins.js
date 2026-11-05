@@ -89,7 +89,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       u_color: { value: new T.Vector4(1, 1, 1, 1) }, u_shadowAlpha: { value: 0.45 } },
   }), capacity);
   const pool = Array.from({ length: capacity }, () => ({
-    age: 0, x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, slopeX: 0, slopeZ: 0,
+    age: 0, x: 0, y: 0, z: 0, floorY: 0, dx: 0, dy: 0, dz: 0, slopeX: 0, slopeZ: 0,
     size: 1, scatter: 0, flyAt: 0, high: 0, low: 0, angle: 0, alpha: 1,
   }));
   const goal = new T.Vector3(), goalLocal = new T.Vector3(), launchLocal = new T.Vector3();
@@ -102,10 +102,11 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       1 - 2 * (iconRect.top + iconRect.height / 2 - canvasRect.top) / canvasRect.height);
   }
 
-  function spawn(origin, dx, dz, big, index) {
+  function spawn(origin, dx, dz, big, index, floorY) {
     if (active === capacity) return;
     const s = pool[active++];
     s.x = origin.x; s.y = origin.y; s.z = origin.z;
+    s.floorY = floorY;
     // Stop the fan at cover. Query terrain at spawn time rather than raycasting every frame.
     for (let step = 1; step <= 4; step++) {
       const t = step / 4;
@@ -130,24 +131,36 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     s.angle = random(0, turn);
   }
 
-  function burst(origin, largeKill) {
-    const normalCount = largeKill ? 7 : 3;
-    const range = (largeKill ? 30 : 25) * unit;
+  function burst(origin, largeKill, prize) {
+    const smallCoins = prize?.smallCoins ?? (largeKill ? 7 : 3);
+    const bigCoins = prize?.bigCoins ?? (largeKill ? 2 : 0);
+    const floorY = prize?.floorY ?? origin.y;
+    // Keep a full new boss payout visible even if several bursts overlap on a small pool.
+    if (prize) {
+      while (active + smallCoins + bigCoins > capacity) {
+        let earliest = 0;
+        for (let i = 1; i < active; i++) {
+          if (pool[i].flyAt - pool[i].age < pool[earliest].flyAt - pool[earliest].age) earliest = i;
+        }
+        const retired = pool[earliest];
+        pool[earliest] = pool[--active];
+        pool[active] = retired;
+      }
+    }
+    const range = (bigCoins ? 30 : 25) * unit;
     let fx = camera.position.x - origin.x, fz = camera.position.z - origin.z;
     const length = Math.hypot(fx, fz);
     if (length > 0) { fx /= length; fz /= length; }
     else { fx = 0; fz = 1; }
     let angle = 0;
-    if (largeKill) {
-      for (let i = 0; i < 2 && active < capacity; i++) {
-        const distance = random(15, 30) * unit;
-        angle += Math.PI * random(0.3, 0.9);
-        spawn(origin, Math.cos(angle) * distance, Math.sin(angle) * distance, true, i);
-      }
+    for (let i = 0; i < bigCoins && active < capacity; i++) {
+      const distance = random(15, 30) * unit;
+      angle += Math.PI * random(0.3, 0.9);
+      spawn(origin, Math.cos(angle) * distance, Math.sin(angle) * distance, true, i, floorY);
     }
-    for (let i = 0; i < normalCount && active < capacity; i++) {
+    for (let i = 0; i < smallCoins && active < capacity; i++) {
       const side = random(-range, range), forward = random(0, range);
-      spawn(origin, fz * side + fx * forward, -fx * side + fz * forward, false, i);
+      spawn(origin, fz * side + fx * forward, -fx * side + fz * forward, false, i, floorY);
     }
   }
 
@@ -171,9 +184,9 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       if (s.age < 0) continue;
       const scatter = Math.min(1, s.age / s.scatter);
       const flight = Math.max(0, (s.age - s.flyAt) / flyTime);
-      const floor = s.y + s.dy * scatter;
+      const baseHeight = s.y + s.dy * scatter;
       const x = s.x + s.dx * scatter, z = s.z + s.dz * scatter;
-      const y = floor + 5 * unit * s.size + jump(s.age, s.high, s.low);
+      const y = baseHeight + 5 * unit * s.size + jump(s.age, s.high, s.low);
       let travel = flight;
       if (flight > 0) {
         // Reserve the final 0.2 s for the last metre, even for kills across the map.
@@ -212,6 +225,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       } else coins.setMatrixAt(drawn++, pose.matrix);
       if (flight > 0) continue;
       // Original oblique silhouette projected onto the local ground plane.
+      const floor = lerp(s.floorY, s.y + s.dy, scatter);
       const gx = s.slopeX, gz = s.slopeZ;
       const skewY = -0.3 * gx - 0.8 * gz;
       projection.set(1, -0.3, 0, 0.3 * floor,
@@ -224,6 +238,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     submit(fadingCoins, fading);
     if (fading) opacity.needsUpdate = true;
   }
-  return { burst, update, setWalletTarget };
+  function clear() { active=0; for(const mesh of [coins,shadows,fadingCoins])submit(mesh,0); }
+  return { burst, update, setWalletTarget, clear };
 }
 

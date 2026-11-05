@@ -30,6 +30,8 @@ export function gunIcon(type) {
       ? 'M4 36l20-12 3 4 4-3-4-8 4-2 4 5C50 16 68 9 89 7 76 22 59 30 39 32l2 5-4 2-5-8-5 3 1 4-19 10z'
       : type === 'pistol'
         ? 'M8 11h53v4h4v10H38l-4 5h-9l-4 14H10l5-21H8zm17 14-1 4h6l3-4z'
+        : type === 'mg3'
+          ? 'M2 19l13 2 8-3h8v-3h12l3 3h29v-4h3v5h7l4-2h3v6h-5l-3-1h-7l-15 9-2-2 11-7H53v4H40v12H24V27l-4 8-5-2 4-9-6 1-9 5H2zm45 1v2h5v-2zm8 0v2h5v-2zm8 0v2h5v-2z'
         : 'M3 19h14l7 4h8v-9h6v4h25v-3h4v4h12v3h10v4H66l-4 4H48l4 12-8 3-7-15h-5l-4 11-7-3 3-10h-7L4 35z';
   return (
     '<svg viewBox="0 0 ' +
@@ -66,7 +68,7 @@ export function makeRadar(world, player) {
     ink.lineTo(64, z);
     ink.stroke();
   }
-  for (const p of terrainPatches) {
+  for (const p of world.prison ? [] : terrainPatches) {
     ink.fillStyle = p.pit ? '#484b40' : p.bridge ? '#676d57' : '#505d4f';
     ink.fillRect(p.x0, p.z0, p.x1 - p.x0, p.z1 - p.z0);
   }
@@ -84,8 +86,8 @@ export function makeRadar(world, player) {
   ink.textAlign = 'center';
   ink.font = 'bold 4px sans-serif';
   ink.fillStyle = '#e8ab66';
-  ink.fillText('A', 40, -26);
-  ink.fillText('B', -40, -26);
+  if (world.prison) ink.fillText('C', 0, -22);
+  else { ink.fillText('A', 40, -26); ink.fillText('B', -40, -26); }
   return (enemies) => {
     ctx.fillStyle = '#24312e';
     ctx.fillRect(0, 0, w, h);
@@ -96,9 +98,9 @@ export function makeRadar(world, player) {
     ctx.translate(-player.x, -player.z);
     for (const e of enemies) {
       if (!e.alive || e.opacity < 0.22) continue;
-      ctx.fillStyle = '#f18a56';
+      ctx.fillStyle = e.boss ? '#ff4d47' : '#f18a56';
       ctx.beginPath();
-      ctx.arc(e.root.position.x, e.root.position.z, 0.72, 0, Math.PI * 2);
+      ctx.arc(e.root.position.x, e.root.position.z, e.boss ? 1.5 : 0.72, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.translate(player.x, player.z);

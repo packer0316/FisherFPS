@@ -28,6 +28,7 @@
         </div>
         <span class="header-rule"></span><span class="mode"><i></i> 殭屍獵場</span>
         <div class="top-actions">
+          <button id="boss-btn" title="BOSS 挑戰 (J)" aria-haspopup="dialog">BOSS 挑戰 <kbd>J</kbd></button>
           <button id="auto-btn" aria-pressed="false" title="切換自動射擊 (F)">
             <span id="auto-label">自動射擊：關</span><kbd>F</kbd>
           </button>
@@ -64,6 +65,10 @@
           <div><b id="enemy-health"></b></div>
         </div>
         <div id="hitmark">×</div>
+        <section id="boss-health" hidden aria-label="典獄長血量">
+          <div><b>典獄長</b><span id="boss-cue"></span><strong id="boss-percent">100%</strong></div>
+          <div class="boss-meter"><i id="boss-fill"></i></div>
+        </section>
         <div id="reward"></div>
         <section id="brief">
           <div class="operation"><span></span> OPERATION <b>/</b> DUST BAZAAR</div>
@@ -74,6 +79,7 @@
           </button>
         </section>
         <div class="vitals">
+          <div id="player-health" class="stat" hidden><div><small>生命</small><strong id="health-value">100</strong></div></div>
           <div class="stat">
             <span id="wallet-anchor"><i data-icon="coin"></i><canvas id="wallet-pickup" width="144" height="144" aria-hidden="true"></canvas></span>
             <div><small>賞金餘額</small><strong id="wallet">1,000</strong></div>
@@ -113,10 +119,34 @@
           <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動</span
           ><span><i data-icon="mouse"></i> 左鍵射擊・右鍵開鏡</span><span><kbd>Shift</kbd> 跑步</span
           ><span><kbd>Ctrl</kbd> 蹲下</span><span><kbd>Space</kbd> 跳躍</span><span><kbd>R</kbd> 換彈</span
-          ><span><kbd>1</kbd> 步槍 <kbd>2</kbd> 手槍 <kbd>3</kbd> 刀</span><span><kbd>Esc</kbd> 暫停</span>
+          ><span><kbd>1</kbd> 步槍 <kbd>2</kbd> 手槍 <kbd>3</kbd> 刀 <kbd>4</kbd> 重機槍</span><span><kbd>Esc</kbd> 暫停</span>
         </div>
         <span class="mobile-legend">搖桿推到底跑步　右側滑動轉向　先蹲再跳可跳更高</span>
       </footer>
+      <div id="boss-menu" class="overlay" hidden>
+        <section class="challenge-window" role="dialog" aria-modal="true" aria-labelledby="challenge-title">
+          <div class="shop-head"><h2 id="challenge-title">選擇 BOSS 挑戰</h2>
+            <button id="close-boss" class="icon-button" aria-label="關閉挑戰選單"><i data-icon="close"></i></button></div>
+          <div class="challenge-roster">
+            <button id="challenge-warden" class="challenge-card">
+              <span class="challenge-copy"><small>C 區監獄中庭</small><strong>典獄長</strong><span id="start-warden">進入挑戰　→</span></span>
+            </button>
+            <div class="challenge-reserves">
+              <button disabled>挑戰 02 <small>尚未開放</small></button>
+              <button disabled>挑戰 03 <small>尚未開放</small></button>
+              <button disabled>挑戰 04 <small>尚未開放</small></button>
+            </div>
+          </div>
+          <button id="leave-prison" class="challenge-secondary" hidden>返回沙境獵場</button>
+        </section>
+      </div>
+      <div id="boss-result" class="overlay" hidden>
+        <section class="challenge-window result-window" role="dialog" aria-modal="true" aria-labelledby="result-title">
+          <h2 id="result-title"></h2><p id="result-detail"></p>
+          <button id="retry-warden" class="challenge-primary">再次挑戰</button>
+          <button id="result-leave" class="challenge-secondary">返回獵場</button>
+        </section>
+      </div>
       <div id="shop" class="overlay" hidden>
         <section class="shop-window">
           <div class="shop-head">

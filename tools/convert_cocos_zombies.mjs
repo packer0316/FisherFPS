@@ -7,12 +7,16 @@ import { Matrix4, Vector3, Quaternion } from 'three';
 const source = process.argv[2];
 if (!source) throw new Error('Pass the TMDC_Zombie directory as the first argument.');
 const output = fileURLToPath(new URL('../public/monsters/', import.meta.url));
-for (const [key, folder, model, skin] of [
+const officerDirectory = process.argv[3];
+const characters = officerDirectory ? [
+  ['warden', 'Prison_officer', 'Prison_officer', 'Prison_officer_Base_color'],
+] : [
   ['walker', 'GoldenZombie_Man', 'Zombie_man', 'Zombie_man_ALL_01'],
   ['stalker', 'GoldenZombie_Woman', 'Zombie_girl', 'Zombie_girl_ALL_01'],
   ['raider', 'Thief', 'Grave_robber', 'Grave_robber'],
-]) {
-  const dir = path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
+];
+for (const [key, folder, model, skin] of characters) {
+  const dir = officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
   const data = fs.readFileSync(path.join(dir, model + '.c3b'));
   if (!data.subarray(0, 6).equals(Buffer.from([67, 51, 66, 0, 0, 7])))
     throw new Error('Expected C3B 0.7');
@@ -122,6 +126,20 @@ for (const [key, folder, model, skin] of [
       const attributes = {};
       for (const f of fields) {
         if (f.type !== 'GL_FLOAT') throw new Error('Unexpected vertex component ' + f.type);
+        if (f.attr === 'TANGENT') {
+          const normals = fields.find((v) => v.attr === 'NORMAL').values;
+          const binormals = fields.find((v) => v.attr === 'BINORMAL').values;
+          const n = new Vector3(), t = new Vector3(), b = new Vector3();
+          const tangents = vertices.flatMap((i) => {
+            n.fromArray(normals, i * 3);
+            t.fromArray(f.values, i * 3).normalize();
+            b.fromArray(binormals, i * 3);
+            return [t.x, t.y, t.z, n.cross(t).dot(b) < 0 ? -1 : 1];
+          });
+          attributes.TANGENT = accessor(tangents, 'VEC4');
+          continue;
+        }
+        if (!attributesByName[f.attr]) continue;
         const [attr, type] = attributesByName[f.attr];
         const values = vertices.flatMap((i) => f.values.slice(i * f.size, (i + 1) * f.size));
         if (attr === 'TEXCOORD_0')
@@ -157,21 +175,24 @@ for (const [key, folder, model, skin] of [
     const n = { name, translation: pos.toArray(), rotation: rot.toArray(), scale: scale.toArray() };
     const id = gltf.nodes.push(n) - 1;
     byName.set(name, id);
+    const drawNodes = [];
     const parts = u32();
     for (let j = 0; j < parts; j++) {
       const prim = primitives.get(string());
       string();
-      if (j > 0 || !prim) throw new Error('Unexpected character mesh partition');
-      n.mesh = gltf.meshes.push({ primitives: [prim] }) - 1;
+      if (!prim) throw new Error('Missing character mesh partition');
+      const draw = parts === 1 ? n : { name: name + '_part' + j };
+      if (draw !== n) drawNodes.push(gltf.nodes.push(draw) - 1);
+      draw.mesh = gltf.meshes.push({ primitives: [prim] }) - 1;
       const bones = read(u32(), () => ({ name: string(), inverse: read(16, f32) }));
-      if (bones.length) bindings.push({ node: n, bones });
+      if (bones.length) bindings.push({ node: draw, bones });
       const uvMaps = u32();
       for (let k = 0; k < uvMaps; k++) {
         const textureIndices = u32();
         cursor += 4 * textureIndices;
       }
     }
-    const children = read(u32(), node);
+    const children = [...drawNodes, ...read(u32(), node)];
     if (children.length) n.children = children;
     return id;
   }

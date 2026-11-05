@@ -56,7 +56,7 @@ const types = [
 
 // FishDefine.lua uses 30 fps. The FBX import adds one Blender frame to the GLB timeline.
 // Sample the interval boundaries too: a sparse bone track can straddle a whole named action.
-function frameClip(source, name, [first, last], offset) {
+export function frameClip(source, name, [first, last], offset) {
   const start = (first + offset) / 30,
     end = (last + offset) / 30;
   const tracks = source.tracks.map((track) => {
@@ -78,13 +78,11 @@ function frameClip(source, name, [first, last], offset) {
   });
   return new T.AnimationClip(name, last > first ? end - start : 1, tracks).optimize();
 }
-export async function loadHunt(scene, world) {
+let speciesLibrary;
+function loadSpecies() {
   const loader = new GLTFLoader();
-  const assets = await Promise.all(
-    types.map((t) => loader.loadAsync('/monsters/' + t.id + '.glb')),
-  );
-  const clips = assets.map((asset, index) => {
-    const type = types[index];
+  return Promise.all(types.map(async (type) => {
+    const asset = await loader.loadAsync('/monsters/' + type.id + '.glb');
     const take = asset.animations.reduce((a, b) => (a.tracks.length > b.tracks.length ? a : b));
     const clip = (name, range) =>
       frameClip(take, name, range, asset.asset.extras?.frameOffset ?? 1);
@@ -95,13 +93,37 @@ export async function loadHunt(scene, world) {
     for (const name of ['dead', 'jump_down', 'stand_up']) {
       if (type[name]) library[name] = clip(name, type[name]);
     }
-    return library;
-  });
+    return { scene: asset.scene, clips: library };
+  }));
+}
+export async function loadHunt(scene, world, boss = null) {
+  speciesLibrary ??= loadSpecies().catch(error => { speciesLibrary = null; throw error; });
+  const library = await speciesLibrary;
+  const assets = library.map(species => species.scene);
+  if (world.prison) {
+    // Share geometry, clips and original skins between levels. Only the two uniforms differ.
+    await Promise.all(['inmate-man.jpg', 'inmate-woman.jpg'].map(async (name, i) => {
+      const texture = await new T.TextureLoader().loadAsync('/prison/' + name);
+      texture.flipY = false;
+      texture.colorSpace = T.SRGBColorSpace;
+      assets[i] = clone(assets[i]);
+      const variants = new Map();
+      assets[i].traverse(o => {
+        if (!o.isMesh) return;
+        if (!variants.has(o.material)) {
+          const uniform = o.material.clone();
+          uniform.map = texture;
+          variants.set(o.material, uniform);
+        }
+        o.material = variants.get(o.material);
+      });
+    }));
+  }
   for (const mesh of world.zones) {
     computeBoundsTree.call(mesh.geometry, { targetLeafSize: 16 });
     mesh.raycast = acceleratedRaycast;
   }
-  const enemies = [],
+  const enemies = [], targets = boss ? [boss] : enemies,
     ray = new T.Raycaster(),
     blockHits = [];
   ray.firstHitOnly = true;
@@ -132,7 +154,7 @@ export async function loadHunt(scene, world) {
   function create(typeIndex, spot, index, pack) {
     const type = types[typeIndex],
       asset = assets[typeIndex];
-    const model = clone(asset.scene),
+    const model = clone(asset),
       root = new T.Group(),
       holder = new T.Group();
     root.add(holder);
@@ -148,7 +170,7 @@ export async function loadHunt(scene, world) {
       if (n.isBone) bones.push(n);
     });
     const actions = Object.fromEntries(
-      Object.entries(clips[typeIndex]).map(([key, clip]) => [key, mixer.clipAction(clip)]),
+      Object.entries(library[typeIndex].clips).map(([key, clip]) => [key, mixer.clipAction(clip)]),
     );
     for (const name of ['dead', 'jump_down', 'stand_up']) {
       if (!actions[name]) continue;
@@ -252,6 +274,22 @@ export async function loadHunt(scene, world) {
     return fallback ? nearbyFallback : null;
   }
   function populate(camera) {
+    if (world.prison) {
+      world.resetGates();
+      for(let i=0;i<8;i++){
+        const a = i * Math.PI / 4 + .31, x = Math.cos(a) * 13, z = Math.sin(a) * 13;
+        const type = types[i % types.length];
+        const spot = homeSpot(x, z, type.height, camera.position, enemies[i]) ?? candidate.set(x, .015, z);
+        if (!enemies[i]) {
+          const pack={dx:0,dz:0,timer:2+i*.4,resting:true};
+          packs.push(pack);
+          const e=create(i%types.length,spot,i,pack);
+          enemies.push(e);targets.push(e);
+        }
+        beginEntry(enemies[i],spot,camera,1,i<2);
+      }
+      return;
+    }
     const counts = spawns.map(() => 1);
     for (let i = 0; i < population - counts.length; i++) counts[clusterSlots[i % clusterSlots.length]]++;
     for (let i = 0; i < spawns.length; i++) {
@@ -281,6 +319,14 @@ export async function loadHunt(scene, world) {
   function maintainPopulation(dt, camera, wave) {
     refillIn -= dt;
     if (refillIn > 0) return;
+    if (world.prison) {
+      refillIn=.48;
+      const e=enemies.find(actor=>actor.finished);
+      if(!e)return;
+      const spot=localSpot(camera,e.height,e) ?? homeSpot(e.anchor.x,e.anchor.z,e.height,camera.position,e);
+      if(spot)beginEntry(e,spot,camera,1);
+      return;
+    }
     let vacant = null, donor = null, farthest = 25, nearby = 0, inFront = 0;
     for (const e of enemies) {
       if (e.finished) { vacant ??= e; continue; }
@@ -347,17 +393,21 @@ export async function loadHunt(scene, world) {
 
   const overhead = new T.Raycaster(), roofHits = [];
   overhead.firstHitOnly = true;
-  function clearOverhead(spot) {
-    // Check for sky, including high roofs above the starting pose.
-    const clearance = 24;
+  const dropProbes = [[0, 0], [-0.55, 0], [0.55, 0], [0, -0.55], [0, 0.55]];
+  const fallGravity = 9.81;
+  function clearOverhead(spot, clearance) {
     if (world.blocked(spot.x, spot.z, 0.54, spot.y, clearance)) return false;
-    overhead.ray.origin.copy(spot);
-    overhead.ray.origin.y += 0.15;
     overhead.ray.direction.set(0, 1, 0);
     overhead.far = clearance;
-    roofHits.length = 0;
-    overhead.intersectObjects(world.zones, false, roofHits);
-    return !roofHits.length;
+    const count = world.prison ? dropProbes.length : 1;
+    for (let i = 0; i < count; i++) {
+      const [dx, dz] = dropProbes[i];
+      overhead.ray.origin.set(spot.x + dx, spot.y + 0.15, spot.z + dz);
+      roofHits.length = 0;
+      overhead.intersectObjects(world.zones, false, roofHits);
+      if (roofHits.length) return false;
+    }
+    return true;
   }
   function beginEntry(e, spot, camera, wave, initial = false) {
     e.mixer.stopAllAction();
@@ -373,27 +423,44 @@ export async function loadHunt(scene, world) {
     e.visibleToPlayer = false;
     e.aimBone = e.chest;
     e.entryTime = e.death = e.animDebt = e.scanIn = e.unseen = 0;
-    const drop = 3.1 + Math.random() * 1.8;
+    const drop = world.prison
+      ? world.dropCeilingY - spot.y - e.height - (0.3 + Math.random() * 0.8)
+      : 3.1 + Math.random() * 1.8;
     const falling = e.actions.jump_down && (initial || Math.random() < 0.75)
-      && clearOverhead(spot);
-    e.entry = falling ? 'fall' : 'fade';
+      && drop > 0 && clearOverhead(spot, world.prison ? drop + e.height : 24);
+    const gate = !falling && world.prison ? world.openGate(camera.position) : null;
+    e.entry = falling ? 'fall' : gate ? 'gate' : 'fade';
+    if(gate){
+      e.gate=gate;
+      e.root.position.set(gate.x+gate.side*1.45,.015,gate.z);
+      e.home.set(gate.x-gate.side*3.5,.015,gate.z);
+      e.root.rotation.y=-gate.side*Math.PI/2;
+      e.groundY=.015;
+    }
     e.root.visible = !initial;
-    e.state = falling ? 'jump_down' : e.type.idle ? 'idle' : 'walk';
+    e.state = falling ? 'jump_down' : gate ? 'walk' : e.type.idle ? 'idle' : 'walk';
     const action = e.actions[e.state];
     action.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).play();
     if (falling) {
       e.dropHeight = drop;
-      e.dropTime = Math.sqrt(2 * drop / 9.81);
+      e.dropTime = Math.sqrt(2 * drop / fallGravity);
       e.root.position.y += drop;
-      action.paused = true; // Hold the airborne pose until the authored descent is due.
+      action.paused = true; // Sample the pose against the actual fall, including contact.
     } else action.time = (e.phase / (2 * Math.PI)) * action.getClip().duration;
-    setOpacity(e, falling ? 1 : 0);
+    setOpacity(e, falling || gate ? 1 : 0);
     e.mixer.update(0);
     e.root.updateMatrixWorld(true);
   }
 
   function updateEntry(e, dt) {
     e.entryTime += dt;
+    if(e.entry==='gate'){
+      const t=T.MathUtils.clamp((e.entryTime-.48)/1.85,0,1);
+      e.root.position.x=e.gate.x+e.gate.side*(1.45-4.95*t);
+      e.mixer.update(dt);
+      if(t>=1)e.entry=null;
+      return;
+    }
     if (e.entry === 'fade') {
       setOpacity(e, T.MathUtils.smoothstep(e.entryTime, 0, 0.8));
       e.mixer.update(dt);
@@ -402,10 +469,14 @@ export async function loadHunt(scene, world) {
     }
     if (e.entry === 'fall') {
       const end = Math.min(e.dropTime, e.entryTime);
-      e.root.position.y = e.groundY + Math.max(0, e.dropHeight - 0.5 * 9.81 * end ** 2);
-      // Sample jump_down at 30 fps, with its last frame exactly at ground contact.
+      e.root.position.y = e.groundY + Math.max(0, e.dropHeight - 0.5 * fallGravity * end ** 2);
       const action = e.actions.jump_down;
-      action.time = Math.max(0, action.getClip().duration - e.dropTime + end);
+      const duration = action.getClip().duration;
+      // On a long drop ease through the airborne pose, then play the landing frames at source speed.
+      if (world.prison && e.dropTime > duration) {
+        const approach = e.dropTime - duration * 0.7;
+        action.time = end < approach ? 0.3 * duration * (end / approach) : duration - (e.dropTime - end);
+      } else action.time = Math.max(0, duration - e.dropTime + end);
       e.mixer.update(0);
       if (e.entryTime < e.dropTime) return;
       e.root.position.y = e.groundY;
@@ -425,6 +496,11 @@ export async function loadHunt(scene, world) {
     e.death = 0;
     e.deathFloor = e.groundY;
     e.deathDrop = Math.max(0, e.root.position.y - e.groundY);
+    // A kill changes the pose, but the body keeps the momentum of its descent.
+    e.deathDownSpeed = world.prison && e.entry === 'fall' ? fallGravity * e.entryTime : 0;
+    e.deathFallTime = world.prison && e.entry === 'fall'
+      ? (Math.sqrt(e.deathDownSpeed ** 2 + 2 * fallGravity * e.deathDrop) - e.deathDownSpeed) / fallGravity
+      : 0;
     e.deathOpacity = e.opacity;
     e.entry = null;
     e.animDebt = 0;
@@ -438,8 +514,11 @@ export async function loadHunt(scene, world) {
   function updateDeath(e, dt) {
     e.death += dt;
     e.mixer.update(dt);
-    const duration = e.actions.dead?.getClip().duration ?? 0.4;
-    if (e.deathDrop > 0) {
+    const duration = Math.max(e.actions.dead?.getClip().duration ?? 0.4, e.deathFallTime);
+    if (e.deathFallTime > 0) {
+      const t = e.death;
+      e.root.position.y = e.deathFloor + Math.max(0, e.deathDrop - e.deathDownSpeed * t - 0.5 * fallGravity * t * t);
+    } else if (e.deathDrop > 0) {
       const fallTime = T.MathUtils.clamp(e.deathDrop / 9, 0.15, 0.35);
       e.root.position.y = e.deathFloor + e.deathDrop * (1 - Math.min(1, e.death / fallTime) ** 2);
     }
@@ -582,7 +661,7 @@ export async function loadHunt(scene, world) {
       if (
         out.y > e.root.position.y + 0.45 &&
         out.y < e.root.position.y + e.height + 0.3 &&
-        Math.hypot(out.x - e.root.position.x, out.z - e.root.position.z) < 1.2
+        Math.hypot(out.x - e.root.position.x, out.z - e.root.position.z) < (e.boss ? e.height*.65 : 1.2)
       )
         return out;
     }
@@ -631,7 +710,7 @@ export async function loadHunt(scene, world) {
     let selected = null,
       best = Infinity;
     camera.getWorldDirection(eyeDir);
-    for (const e of enemies) {
+    for (const e of targets) {
       if (!e.alive) continue;
       aimPoint(e, pos);
       delta.subVectors(pos, camera.position);
@@ -660,11 +739,12 @@ export async function loadHunt(scene, world) {
     let distance = surface?.distance ?? shotRay.far;
     let nearest = surface,
       enemy = null;
-    for (const e of enemies) {
+    for (const e of targets) {
       if (!e.alive || e.opacity < 0.22) continue;
       point.copy(e.root.position);
       point.y += e.height * 0.5;
-      if (shotRay.ray.distanceSqToPoint(point) > 9 || origin.distanceTo(point) > distance + 3)
+      const radius=e.hitRadius ?? 3;
+      if (shotRay.ray.distanceSqToPoint(point) > radius*radius || origin.distanceTo(point) > distance + radius)
         continue;
       hits.length = 0;
       e.root.updateMatrixWorld(true);
@@ -690,5 +770,5 @@ export async function loadHunt(scene, world) {
       normal,
     };
   }
-  return { enemies, populate, update, kill, aimPoint, inSight, select, traceShot };
+  return { enemies, targets, populate, update, kill, aimPoint, inSight, select, traceShot };
 }
