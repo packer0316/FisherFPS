@@ -17,6 +17,8 @@
     <div id="app">
       <canvas id="world" aria-label="沙境獵場 3D 遊戲畫面"></canvas>
       <div class="vignette"></div>
+      <div id="heal-glow" class="supply-glow" aria-hidden="true"></div>
+      <div id="speed-glow" class="supply-glow" aria-hidden="true"></div>
       <header>
         <div class="brand">
           <svg viewBox="0 0 44 34" aria-hidden="true">
@@ -79,6 +81,11 @@
           </button>
         </section>
         <div class="vitals">
+          <div id="speed-buff" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 10-13h-7z"/></svg>
+            <span>移速 +35%</span><b><span id="speed-seconds">20</span><small> 秒</small></b>
+            <i></i>
+          </div>
           <div id="player-health" class="stat" hidden><div><small>生命</small><strong id="health-value">100</strong></div></div>
           <div class="stat">
             <span id="wallet-anchor"><i data-icon="coin"></i><canvas id="wallet-pickup" width="144" height="144" aria-hidden="true"></canvas></span>

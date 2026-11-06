@@ -23,3 +23,9 @@ https://creativecommons.org/publicdomain/zero/1.0/
 
 FisherFPS implements its own view framing, fingertip fitting, arm IK, magazine and bolt choreography, optic, melee swing and lighting. The knife uses both gloves of the credited arm rig, posed at runtime for an open guard and a forward grip.
 
+knife-arms.glb: FisherFPS derivative of the above credited ak47.glb arm rig.
+The complete right glove and sleeve were mirrored with their skin weights to
+rebuild the left side without the upstream gun-contact dents. Joint lengths,
+UVs and texture attribution are retained. Wrist volume corrections are baked
+into this dedicated mesh; the original firearm assets are unchanged.
+

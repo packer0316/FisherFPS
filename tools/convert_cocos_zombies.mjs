@@ -4,11 +4,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Matrix4, Vector3, Quaternion } from 'three';
 
+const supplyDirectory = process.argv[2] === '--supply' ? process.argv[3] : null;
 const source = process.argv[2];
 if (!source) throw new Error('Pass the TMDC_Zombie directory as the first argument.');
-const output = fileURLToPath(new URL('../public/monsters/', import.meta.url));
-const officerDirectory = process.argv[3];
-const characters = officerDirectory ? [
+const output = fileURLToPath(new URL(supplyDirectory ? '../public/supplies/' : '../public/monsters/', import.meta.url));
+fs.mkdirSync(output, { recursive: true });
+const officerDirectory = supplyDirectory ? null : process.argv[3];
+const characters = supplyDirectory ? [
+  ['airdrop', '', 'Airdrop_box', 'Airdrop_box_2D_View'],
+] : officerDirectory ? [
   ['warden', 'Prison_officer', 'Prison_officer', 'Prison_officer_Base_color'],
 ] : [
   ['walker', 'GoldenZombie_Man', 'Zombie_man', 'Zombie_man_ALL_01'],
@@ -16,7 +20,7 @@ const characters = officerDirectory ? [
   ['raider', 'Thief', 'Grave_robber', 'Grave_robber'],
 ];
 for (const [key, folder, model, skin] of characters) {
-  const dir = officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
+  const dir = supplyDirectory ?? officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
   const data = fs.readFileSync(path.join(dir, model + '.c3b'));
   if (!data.subarray(0, 6).equals(Buffer.from([67, 51, 66, 0, 0, 7])))
     throw new Error('Expected C3B 0.7');

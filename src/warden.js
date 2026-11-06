@@ -390,6 +390,12 @@ export async function loadWarden(scene, world, particles, groundImpact) {
   function hit() {
     mat.uniforms.u_bleachRate.value = 0.36;
   }
+  function heal(amount) {
+    if (hp <= 0 || state === 'off' || !Number.isFinite(amount)) return 0;
+    const before=hp;
+    hp=Math.min(100,hp+Math.max(0,amount));
+    return hp-before;
+  }
   function smallPrize(position) {
     particles.wardenFx('prize', holder, position);
     // Award every win immediately. Only a free body animation may present the reward.
@@ -436,6 +442,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     update,
     reset,
     hit,
+    heal,
     smallPrize,
     defeat,
     stop,

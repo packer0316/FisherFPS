@@ -703,6 +703,7 @@ export function makePrison(scene, coarse, environment) {
   scene.updateMatrixWorld(true);
   return {
     prison: true,
+    navigationBounds: {x:half,z:25},
     dropCeilingY: eaves,
     rubble: makePrisonRubble(scene, coarse, colliders, truss, cement),
     sun,

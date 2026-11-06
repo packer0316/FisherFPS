@@ -7,6 +7,7 @@ import { makeEffects } from './effects.js';
 import { loadCombatParticles } from './combat-particles.js';
 import { loadHunt } from './hunt.js';
 import { loadRewardCoins } from './reward-coins.js';
+import { loadBossSupplies, makeSupplyEffects } from './boss-supplies.js';
 import { $, gunIcon, makeRadar } from './ui.js';
 import { emit } from './events.js';
 
@@ -42,7 +43,8 @@ async function boot() {
     radar = makeRadar(world, player);
   const desert={scene,world,hunt,rewardCoins,fx,radar};
   let prisonLevel, loadingLevel, fieldReturn, bossReturn='ready', loadingChallenge=false;
-  let warden=null;
+  let warden=null, supplies=null;
+  const supplyEffects=makeSupplyEffects();
   const economy = {
     wallet: 1000,
     kills: 0,
@@ -276,14 +278,19 @@ async function boot() {
     const [{makePrison},{loadWarden}]=await Promise.all([import('./prison.js'),import('./warden.js')]);
     const room=new T.Scene();
     const arena=makePrison(room,coarse,desert.scene.environment);
-    const [boss,coins]=await Promise.all([loadWarden(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse)]);
+    const [boss,coins,drops]=await Promise.all([
+      loadWarden(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse),
+      loadBossSupplies(room,arena,grantSupply,particles),
+    ]);
     const crowd=await loadHunt(room,arena,boss.target);
-    prisonLevel={scene:room,world:arena,hunt:crowd,rewardCoins:coins,warden:boss,
+    prisonLevel={scene:room,world:arena,hunt:crowd,rewardCoins:coins,warden:boss,supplies:drops,
       fx:makeEffects(room,particles.playBlood,arena.rubble),radar:makeRadar(arena,player)};
     return prisonLevel;
   }
   function activateLevel(level,pose) {
+    supplies?.clear();supplyEffects.clear();
     ({scene,world,hunt,rewardCoins,fx,radar}=level);warden=level.warden??null;
+    supplies=level.supplies??null;supplies?.clear();
     Object.assign(player,pose.player);feet=pose.feet;
     grounded=true;verticalSpeed=stepOffset=landingTime=landingDip=0;
     tremor=tremorTime=0;
@@ -333,6 +340,7 @@ async function boot() {
   }
   function finishChallenge(won){
     if(mode==='result')return;
+    supplies?.clear();supplyEffects.clear();
     warden.stop();
     $('result-title').textContent=won?'典獄長已擊倒':'挑戰失敗';
     $('result-detail').textContent=won?'典獄長的 400 賞金已入帳。':'生命已耗盡。再次挑戰將恢復 100 生命。';
@@ -359,6 +367,25 @@ async function boot() {
     view.equip(id);
     sync();
     emit('weapon:equip', { weapon: id });
+  }
+  function grantSupply(reward) {
+    if (mode !== 'play' || !warden || warden.health <= 0) return;
+    if (reward.kind === 'heal') {
+      const gained=warden.heal(reward.amount);
+      $('health-value').textContent=warden.health;
+      supplyEffects.heal();
+      notice(gained ? '補給：生命 +' + gained : '補給：生命已滿');
+    } else if (reward.kind === 'mg3') {
+      economy.owned.add('mg3');
+      economy.ammo.mg3=weapons.mg3.mag;
+      reloadLeft=0;reloadEmpty=false;
+      triggerHeld=triggerTap=false;
+      equip('mg3');sync();
+      notice('取得 MG3 重機槍 · 200 發');
+    } else {
+      supplyEffects.boost();
+      notice('移動速度 +35% · 持續 20 秒');
+    }
   }
   function stock() {
     $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
@@ -664,7 +691,7 @@ async function boot() {
     z /= Math.max(1, length);
     const c = Math.cos(player.yaw),
       s = Math.sin(player.yaw),
-      step = dt * (grounded ? pace : airbornePace);
+      step = dt * (grounded ? pace : airbornePace) * supplyEffects.speedFactor;
     const nx = player.x + (x * c + z * s) * step,
       nz = player.z + (-x * s + z * c) * step;
     const stepHeight = grounded ? 0.24 : 0.002;
@@ -760,7 +787,7 @@ async function boot() {
     });
     if (e.hp <= 0) {
       if(e.boss)warden.defeat();
-      else hunt.kill(e);
+      else { hunt.kill(e); if (warden) supplies.drop(e); }
       economy.wallet += e.type.reward;
       rewardCoins.burst(prizeOrigin, Boolean(e.boss || e.type.smallPrize));
       economy.kills++;
@@ -923,6 +950,7 @@ async function boot() {
     updateScope(dt);
     const playing = mode === 'play';
     if (playing) {
+      supplyEffects.update(dt);
       const elapsed = Math.min(0.12, Math.max(0, real));
       const steps = Math.ceil(elapsed * 120);
       for (let i = 0; i < steps; i++) movement(elapsed / steps);
@@ -935,13 +963,15 @@ async function boot() {
     if (playing || mode === 'ready') {
       world.breeze.value += dt;
       if(playing && warden)world.updateGates(dt);
-      hunt.update(dt, clock, playing, camera, economy.wave);
+      hunt.update(dt, clock, playing, camera, economy.wave, feet);
     }
     if (playing) {
       aimAndFire(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
       if (mag() === 0 && reloadLeft === 0) reload();
       if(warden)warden.update(dt,player,playerHit,()=>finishChallenge(true));
+      // A fatal boss hit can change mode above; never collect on the result frame.
+      if(mode==='play')supplies?.update(dt,player,feet);
     }
     fx.update(playing ? dt : 0);
     if (playing) {

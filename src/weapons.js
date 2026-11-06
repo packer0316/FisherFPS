@@ -75,16 +75,17 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   const bodies = { pistol: new T.Group(), rifle: new T.Group(), knife: new T.Group(), mg3: new T.Group() };
   root.add(...Object.values(bodies));
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  const [pistol, ak, knife, detailMap] = await Promise.all([
+  const [pistol, ak, knife, detailMap, knifeArms] = await Promise.all([
     ...['p226', 'ak47', 'kabar'].map((id) => loader.loadAsync('/viewmodel/' + id + '.glb')),
     new T.TextureLoader().loadAsync('/viewmodel/ak-finish.webp'),
+    loader.loadAsync('/viewmodel/knife-arms.glb'),
   ]);
   detailMap.wrapS = detailMap.wrapT = T.RepeatWrapping;
   detailMap.anisotropy = 4;
   // The two long guns share the glove geometry and textures, but pose independent bones.
   const machineArms = clone(ak.scene.getObjectByName('FPRig'));
   const rigs = {
-    knife: installKnife(bodies.knife, pistol, knife, detailMap),
+    knife: installKnife(bodies.knife, knifeArms, knife, detailMap, ak.scene.getObjectByName('FPArms').material),
     pistol: installWeapon(bodies.pistol, pistol, false),
     rifle: installWeapon(bodies.rifle, ak, true, detailMap),
   };
@@ -241,15 +242,15 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
           0.077 * tilt,
         lerp(machineGun ? -0.222 : longGun ? -0.202 : -0.160, -rig.sightY * gunScale, ads) -
           freedom * Math.abs(Math.cos(time * 9)) * 0.006 * moving +
-          (longGun ? 0.084 : 0.062) * tilt +
+          (machineGun ? 0.055 : longGun ? 0.084 : 0.062) * tilt +
           0.012 * (s(phase, 0.64, 0.67) - s(phase, 0.67, 0.75)),
         lerp(machineGun ? -0.545 : longGun ? lerp(-0.505, -0.472, wide) : -0.385, (machineGun ? -0.29 : -0.149) * gunScale, ads) +
-          recoil * 0.026 - (longGun ? 0.14 : 0.09) * tilt,
+          recoil * 0.026 - (machineGun ? 0.21 : longGun ? 0.14 : 0.09) * tilt,
       );
       root.rotation.set(
-        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(0.089, machineGun ? 0.009 : 0.028, ads) + tilt * 0.18 + steerY * freedom,
-        freedom * (longGun ? 0.139 * narrow : 0.055) + steerX * freedom + tilt * 0.34,
-        tilt * 0.25 +
+        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(0.089, machineGun ? 0.009 : 0.028, ads) + tilt * (machineGun ? 0.12 : 0.18) + steerY * freedom,
+        freedom * (longGun ? 0.139 * narrow : 0.055) + steerX * freedom + tilt * (current === 'rifle' ? .18 : .34),
+        tilt * (current === 'rifle' ? .10 : .25) +
           recoil * roll +
           (empty ? 0.1 * (s(phase, 0.73, 0.81) - s(phase, 0.89, 0.97)) : 0),
       );

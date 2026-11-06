@@ -2,6 +2,7 @@ import * as T from 'three';
 import { finishRifle } from './rifle-finish.js';
 import { addReceiverHardware, addRifleSight } from './rifle-hardware.js';
 import { wrapFinger } from './hand-pose.js';
+import { fitRifleRightHand, makeRifleReload } from './rifle-reload.js';
 
 const v = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
 const q = () => new T.Quaternion();
@@ -183,7 +184,8 @@ export function installWeapon(body, asset, rifle, detailMap) {
   const arm = supportArm(space, rifle),
     mag = nodes('Magazine'),
     bolt = nodes('ChargingHandle');
-  const finger = rifle ? nodes('Bone_R005') || nodes('Bone_R.005') : nodes('Bone_R006'),
+  if (rifle) fitRifleRightHand(space);
+  const finger = nodes('Bone_R006'),
     triggerBind = finger?.quaternion.clone();
   const supportGrip = arm.home.clone();
   if (rifle) supportGrip.add(v(0.012, -0.01, 0.105));
@@ -207,6 +209,7 @@ export function installWeapon(body, asset, rifle, detailMap) {
   space.attach(spare);
   spare.scale.copy(mag.scale);
   spare.visible = false;
+  const reloadRifle = rifle ? makeRifleReload(space, mag, spare, bolt) : null;
   const pocket = v(-0.17, -0.48, 0.15),
     wrist = v(),
     destination = v(),
@@ -227,7 +230,7 @@ export function installWeapon(body, asset, rifle, detailMap) {
   for (const point of [tip, port, opticMount]) point.multiplyScalar(unit).add(space.position);
   const sightY = opticMount.y + 0.0345;
   const dot = rifle ? addRifleSight(body, sightY, opticMount.z + 0.023, detailMap) : null;
-  function pose(p, empty, cycle, ads) {
+  function reloadPistol(p, empty, cycle) {
     const take = ease(p, 0.025, 0.17),
       remove = ease(p, 0.18, 0.39),
       insert = ease(p, 0.46, 0.69);
@@ -242,21 +245,13 @@ export function installWeapon(body, asset, rifle, detailMap) {
     held.position.x += (p < 0.41 ? 0.07 : -0.1) * offset;
     held.position.z += 0.065 * rock - 0.045 * offset * (p >= 0.41 ? 1 : 0);
     held.position.y += 0.016 * seatTap;
-    rotation.setFromAxisAngle(
-      xAxis,
-      rifle ? -0.38 * rock + 0.34 * (1 - insert) * (p >= 0.41 && p < 0.7 ? 1 : 0) : 0.08 * offset,
-    );
+    rotation.setFromAxisAngle(xAxis, 0.08 * offset);
     held.quaternion.copy(rotation).multiply(magRotation);
     const release = ease(p, 0.7, 0.81),
       rack = empty ? ease(p, 0.71, 0.83) * (1 - ease(p, 0.93, 1)) : 0;
     const pull = ease(p, 0.83, 0.89) - ease(p, 0.9, 0.94);
     bolt.position.copy(boltHome);
-    bolt.position.z +=
-      (rifle ? 0.115 : 0.052) *
-      Math.max(
-        Math.sin(cycle * Math.PI),
-        empty ? (rifle ? pull : p > 0 ? 1 - ease(p, 0.85, 0.92) : 0) : 0,
-      );
+    bolt.position.z += 0.052 * Math.max(Math.sin(cycle * Math.PI), empty && p > 0 ? 1 - ease(p, 0.85, 0.92) : 0);
     const grip = take * (1 - release);
     destination.copy(grabOffset).applyQuaternion(rotation).add(held.position);
     wrist.copy(supportGrip);
@@ -267,10 +262,16 @@ export function installWeapon(body, asset, rifle, detailMap) {
     const opening =
       ease(p, 0.03, 0.1) - ease(p, 0.11, 0.19) + ease(p, 0.67, 0.75) - ease(p, 0.8, 0.9);
     arm.pose(wrist, grip + 1.4 * rack, Math.max(grip, rack), opening - 0.14 * grip);
+  }
+  function pose(p, empty, cycle, ads) {
     if (finger) {
       finger.quaternion.copy(triggerBind);
-      finger.rotateZ(-0.12 * (1 - ease(cycle, 0.1, 0.8)));
+      // Flex the index PIP only during the shot; keep the fitted resting grip.
+      if (rifle) finger.rotateZ(cycle > 0 ? -.06 * Math.sin(cycle * Math.PI) : 0);
+      else finger.rotateZ(-0.12 * (1 - ease(cycle, 0.1, 0.8)));
     }
+    if (rifle) reloadRifle(p, empty, cycle);
+    else reloadPistol(p, empty, cycle);
     if (dot) {
       dot.visible = ads > 0.03;
       dot.material.opacity = ease(ads, 0.03, 0.78);

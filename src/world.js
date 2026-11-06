@@ -1186,6 +1186,7 @@ export function makeWorld(scene, renderer, mobile) {
   }
   return {
     sun,
+    navigationBounds: bounds,
     colliders,
     zones,
     blocked,

@@ -1,6 +1,7 @@
 import * as T from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { supportArm } from './weapon-rig.js';
+import { makeMachineReload } from './mg3-reload.js';
 import { beltMaterial, finishGeometry, housingMaterial, loadMachineFinishes } from './mg3-finish.js';
 
 const v = (x, y, z) => new T.Vector3(x, y, z);
@@ -291,8 +292,7 @@ export function installMachineGun(body, arms) {
   for (const x of [-.016,.016]) bin.box(barrel,x,.087,.169,.006,.030,.006);
   bin.tube(steel,0,.072,.169,.004,.004,.038,'x');
   bin.finish();
-  const boxHome = v(-.248,-.166,-.49);
-  box.position.copy(boxHome);
+  box.position.set(-.248,-.166,-.49);
   const handle = assembly(bolt);
   handle.box(edge,.076,.030,-.39,.028,.024,.093);
   handle.tube(steel,.102,.031,-.35,.02,.025,.066,'x');
@@ -302,6 +302,7 @@ export function installMachineGun(body, arms) {
     v(-.245,.092,-.501),v(-.257,-.072,-.498));
   const centers = Array.from({length:10}, () => new T.Vector3());
   const span = new T.Vector3(), inverseLink = new T.Quaternion();
+  const reload = makeMachineReload(space, lid, box, bolt, belt, feedPath);
   space.add(lid, box, bolt, belt);
   const unit = .52;
   space.scale.setScalar(unit);
@@ -309,45 +310,22 @@ export function installMachineGun(body, arms) {
   body.add(space);
   const tip = v(0,.041,-1.96).multiplyScalar(unit).add(space.position);
   const port = v(.080,.032,-.432).multiplyScalar(unit).add(space.position);
-  const wrist = new T.Vector3(), contact = new T.Vector3();
-  let lastCount = -1, lastFeed = -1;
+  let lastCount = -1, lastFeed = -1, lastExtension = -1;
   function pose(p, empty, cycle, ads, rounds) {
-    const opening = ease(p,.035,.16) - ease(p,.70,.79);
-    const takeBox = ease(p,.17,.29) - ease(p,.54,.65);
-    const remove = ease(p,.29,.40) - ease(p,.44,.55);
-    const seatBelt = ease(p,.56,.65) - ease(p,.69,.77);
-    const shut = ease(p,.66,.71) - ease(p,.80,.85);
-    const reachLid = ease(p,.005,.067) - ease(p,.135,.22);
-    const rack = ease(p,.80,.86) - ease(p,.935,.985);
-    const pull = ease(p,.855,.91) - ease(p,.91,.945);
-    lid.rotation.x = -1.27 * opening;
-    box.position.copy(boxHome);
-    box.position.x -= .17 * remove; box.position.y -= .56 * remove; box.position.z += .14 * remove;
-    box.rotation.z = -.24 * remove;
-    box.visible = p < .40 || p >= .44;
-    bolt.position.z = .119 * pull;
-    wrist.copy(grip);
-    contact.set(-.048,.138+.25*opening,-.265-.19*opening);
-    wrist.lerp(contact,reachLid).lerp(contact.copy(box.position).addScaledVector(T.Object3D.DEFAULT_UP,.07),takeBox);
-    wrist.lerp(contact.set(-.119,.112,-.50),seatBelt);
-    wrist.lerp(contact.set(-.037,.149+.24*opening,-.26-.19*opening),shut);
-    wrist.lerp(contact.set(.09,.042,-.327+bolt.position.z),rack);
-    const reach = Math.max(reachLid,takeBox,seatBelt,shut,rack);
-    arm.pose(wrist,reach,reach,reach*.4);
-    if (finger) { finger.quaternion.copy(triggerBind); finger.rotateZ(-.13*(1-ease(cycle,.05,.72))); }
+    const extension = reload(p, empty, rounds);
+    if (finger && p === 0) { finger.quaternion.copy(triggerBind); finger.rotateZ(-.13*(1-ease(cycle,.05,.72))); }
 
     // The last links run into the feed tray; a fresh belt is laid in before the cover closes.
-    const remaining = p >= .58 ? 200 : rounds;
-    belt.count = (p > .20 && p < .55) ? 0 : Math.min(9, remaining);
     const feed = 1 - ease(cycle,0,.85);
-    if (belt.count === lastCount && feed === lastFeed) return;
+    if (belt.count === lastCount && feed === lastFeed && extension === lastExtension) return;
     lastCount = belt.count;
     lastFeed = feed;
+    lastExtension = extension;
     // Equal distances along the arc keep the rounds at the same pitch as the belt bends.
     // The far end of each steel strap terminates at the neighbouring link, even on the turn into the box.
-    for (let i=0; i<=belt.count; i++) feedPath.getPointAt(Math.min(1,(i+feed)/9),centers[i]);
+    for (let i=0; i<=belt.count; i++) feedPath.getPointAt(Math.min(1,1-extension+(i+feed)/9),centers[i]);
     for (let i = 0; i < belt.count; i++) {
-      const u = (i+feed)/9;
+      const u = Math.min(1,1-extension+(i+feed)/9);
       link.position.copy(centers[i]);
       span.subVectors(centers[i+1],centers[i]);
       if (span.lengthSq()<1e-10 && i>0) span.subVectors(centers[i],centers[i-1]);

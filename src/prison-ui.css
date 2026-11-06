@@ -221,6 +221,7 @@
   }
 }
 @media (max-width: 530px) {
+  .prison #toast { top: 132px; bottom: auto; }
   #boss-btn {
     font-size: 10px;
     white-space: nowrap;

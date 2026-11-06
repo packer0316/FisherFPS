@@ -38,6 +38,29 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   const slots = (count) => Array.from({ length: count }, () => ({ handle: null, age: 0 }));
   const impacts = slots(3), pickups = slots(5);
   const officerSlots = slots(6);
+  // Fixed handles for the eight pooled supply crates; share the existing arena.
+  const supplySlots = slots(8);
+  let supplyAsset, loadingSupply, supplyVisible=false;
+  function loadSupply() {
+    loadingSupply ??= load(world,'/supplies/fx/special_vfx.efk',1)
+      .then(effect=>{supplyAsset=effect;renderer.resetState();})
+      .catch(error=>{loadingSupply=null;throw error;});
+    return loadingSupply;
+  }
+  function supplyFx(index,anchor,alpha=1) {
+    const slot=supplySlots[index];
+    if (!anchor) {
+      slot.handle?.stop();slot.handle=slot.anchor=null;
+      return;
+    }
+    slot.anchor=anchor;slot.alpha=alpha;
+    if (!slot.handle?.exists) slot.handle=world.play(supplyAsset,0,0,0);
+    if (!slot.handle) return;
+    anchor.updateWorldMatrix(true,false);
+    slot.handle.setMatrix(anchor.matrixWorld.elements);
+    slot.handle.setAllColor(255,255,255,Math.round(alpha*255));
+    supplyVisible=true;
+  }
   const effectMatrix = new Matrix4();
   const officerEffects = {
     aura:   { file: 'Z_039_Permanent_effects', scale: 1, life: Infinity, slot: 0 },
@@ -143,7 +166,13 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   }
   function update(dt) {
     cooldown = Math.max(0, cooldown - dt);
-    if (bloodVisible || officerVisible) {
+    // Refresh live anchors and looping EFK without allocating new tracking objects.
+    supplyVisible=false;
+    for(let i=0;i<supplySlots.length;i++) {
+      const slot=supplySlots[i];
+      if(slot.anchor)supplyFx(i,slot.anchor,slot.alpha);
+    }
+    if (bloodVisible || officerVisible || supplyVisible) {
       if (officerVisible) syncWardenEffects();
       bloodVisible=advance(impacts,dt,1);officerVisible=advance(officerSlots,dt,1);
       world.update(dt*60);
@@ -155,7 +184,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     }
   }
   function render(camera) {
-    if (bloodVisible || officerVisible) {
+    if (bloodVisible || officerVisible || supplyVisible) {
       world.setProjectionMatrix(camera.projectionMatrix.elements);
       world.setCameraMatrix(camera.matrixWorldInverse.elements);
       world.draw();
@@ -170,10 +199,12 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   }
   function clearWorld(){
     stopWarden();
+    for(let i=0;i<supplySlots.length;i++)supplyFx(i,null);
+    supplyVisible=false;
     for(const pool of [impacts,pickups])for(const s of pool){s.handle?.stop();s.handle=null;}
     bloodVisible=pickupVisible=false;clearPickup=true;cooldown=0;
     world.update(1);hud.update(1);
   }
-  return { playBlood, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld };
+  return { playBlood, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx };
 }
 

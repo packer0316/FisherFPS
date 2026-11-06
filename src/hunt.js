@@ -2,6 +2,7 @@ import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+import { makeHuntNavigation } from './hunt-navigation.js';
 
 const types = [
   {
@@ -127,6 +128,7 @@ export async function loadHunt(scene, world, boss = null) {
     ray = new T.Raycaster(),
     blockHits = [];
   ray.firstHitOnly = true;
+  const navigation=makeHuntNavigation(world);
   const pos = new T.Vector3(),
     projected = new T.Vector3(),
     eyeDir = new T.Vector3(),
@@ -193,6 +195,7 @@ export async function loadHunt(scene, world, boss = null) {
     const head = bones.find((n) => /head$/i.test(n.name));
     return {
       root,
+      nav: navigation.createState(),
       model,
       mixer,
       actions,
@@ -339,7 +342,7 @@ export async function loadHunt(scene, world, boss = null) {
           nearby++;
           if (onScreen(camera, sightPoint)) inFront++;
         }
-      } else if (distance > farthest && !e.entry && e.unseen > 2 && e.hp === e.maxHp) {
+      } else if (distance > farthest && !e.entry && !e.nav.chasing && e.unseen > 2 && e.hp === e.maxHp) {
         donor = e;
         farthest = distance;
       }
@@ -410,6 +413,7 @@ export async function loadHunt(scene, world, boss = null) {
     return true;
   }
   function beginEntry(e, spot, camera, wave, initial = false) {
+    navigation.reset(e);
     e.mixer.stopAllAction();
     e.root.position.copy(spot);
     e.home.copy(spot);
@@ -483,7 +487,7 @@ export async function loadHunt(scene, world, boss = null) {
       e.entry = 'land';
       e.state = 'stand_up';
       action.stop();
-      e.actions.stand_up.reset().play();
+      e.actions.stand_up.reset().setEffectiveTimeScale(1).play();
       dt = e.entryTime - e.dropTime;
       e.entryTime = dt;
     }
@@ -497,11 +501,14 @@ export async function loadHunt(scene, world, boss = null) {
     e.deathFloor = e.groundY;
     e.deathDrop = Math.max(0, e.root.position.y - e.groundY);
     // A kill changes the pose, but the body keeps the momentum of its descent.
-    e.deathDownSpeed = world.prison && e.entry === 'fall' ? fallGravity * e.entryTime : 0;
-    e.deathFallTime = world.prison && e.entry === 'fall'
+    const hopping=e.nav.travel;
+    e.deathDownSpeed = hopping ? Math.max(0,fallGravity*hopping.time-hopping.spec.v)
+      : world.prison && e.entry === 'fall' ? fallGravity * e.entryTime : 0;
+    e.deathFallTime = hopping || world.prison && e.entry === 'fall'
       ? (Math.sqrt(e.deathDownSpeed ** 2 + 2 * fallGravity * e.deathDrop) - e.deathDownSpeed) / fallGravity
       : 0;
     e.deathOpacity = e.opacity;
+    navigation.reset(e);
     e.entry = null;
     e.animDebt = 0;
     e.root.rotation.z = 0;
@@ -526,7 +533,8 @@ export async function loadHunt(scene, world, boss = null) {
       // FishKilledShow.Normal: lift, enlarge, return to the floor, then fade out.
       const lift =
         T.MathUtils.clamp(e.death / 0.2, 0, 1) - T.MathUtils.clamp((e.death - 0.4) / 0.2, 0, 1);
-      e.root.position.y = e.deathFloor + 0.13 * lift;
+      const fallingY=e.deathFallTime>0||e.deathDrop>0?e.root.position.y:e.deathFloor;
+      e.root.position.y = fallingY + 0.13 * lift;
       e.root.scale.setScalar(1 + 0.1 * T.MathUtils.clamp((e.death - 0.2) / 0.2, 0, 1));
     }
     if (e.death >= duration) setOpacity(e, e.deathOpacity * Math.max(0, 1 - (e.death - duration) / 0.3));
@@ -535,50 +543,12 @@ export async function loadHunt(scene, world, boss = null) {
       e.root.visible = false;
     }
   }
-  const offsets = [0, 0.5, -0.5, 1.05, -1.05, 1.53, -1.53];
-  function steer(e, tx, tz, step) {
-    const p = e.root.position;
-    let dx = tx - p.x,
-      dz = tz - p.z;
-    const distance = Math.hypot(dx, dz);
-    if (distance < 0.22) return false;
-    dx /= distance;
-    dz /= distance;
-    for (const other of enemies) {
-      if (other === e || !other.alive) continue;
-      const ox = p.x - other.root.position.x,
-        oz = p.z - other.root.position.z;
-      const d2 = ox * ox + oz * oz;
-      if (d2 < 2.25 && d2 > 0.0001) {
-        const repel = (1.5 - Math.sqrt(d2)) / Math.sqrt(d2);
-        dx += ox * repel;
-        dz += oz * repel;
-      }
-    }
-    if (Math.hypot(dx, dz) < 0.12) return false;
-    const angle = Math.atan2(dx, dz);
-    for (const offset of offsets) {
-      const heading = angle + offset,
-        vx = Math.sin(heading),
-        vz = Math.cos(heading);
-      if (
-        world.blocked(p.x + vx * Math.max(step, 0.28), p.z + vz * Math.max(step, 0.28), 0.45, p.y)
-      )
-        continue;
-      p.x += vx * step;
-      p.z += vz * step;
-      p.y = e.groundY = world.terrainHeight(p.x, p.z, p.y) + 0.015;
-      const turn = heading - e.root.rotation.y;
-      e.root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, step * 5.5);
-      return true;
-    }
-    return false;
-  }
-
   const frustum = new T.Frustum(),
     projection = new T.Matrix4(),
     sphere = new T.Sphere();
-  function update(dt, time, live, camera, wave = 1) {
+  const wanderGoal={x:0,y:0,z:0};
+  function update(dt, time, live, camera, wave = 1, playerFeet = camera.position.y - 1.73) {
+    if(live)navigation.update();
     frustum.setFromProjectionMatrix(
       projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
     );
@@ -615,7 +585,7 @@ export async function loadHunt(scene, world, boss = null) {
         else e.root.visible = false;
         continue;
       }
-      let walking = false;
+      let motion = 'idle';
       if (live) {
         e.scanIn -= dt;
         if (!inFrame) e.visibleToPlayer = false;
@@ -624,29 +594,40 @@ export async function loadHunt(scene, world, boss = null) {
           e.scanIn = 0.2 + (e.phase % 1) * 0.1;
         }
         e.unseen = e.visibleToPlayer ? 0 : e.unseen + dt;
-        if (e.visibleToPlayer) {
-          if (distance > e.restDistance)
-            walking = steer(
-              e,
-              camera.position.x,
-              camera.position.z,
-              Math.min(dt * e.pace, distance - e.restDistance),
-            );
-          else {
-            const yaw =
-              Math.atan2(camera.position.x - p.x, camera.position.z - p.z) - e.root.rotation.y;
-            e.root.rotation.y += Math.atan2(Math.sin(yaw), Math.cos(yaw)) * Math.min(1, dt * 4);
-          }
-        } else if (!e.pack.resting) {
-          walking = steer(e, e.home.x + e.pack.dx, e.home.z + e.pack.dz, dt * e.pace * 0.55);
+        // Once alerted, keep following the live player position through cover.
+        // Visibility still gates initial detection and the player's auto-fire.
+        if(e.visibleToPlayer)e.nav.chasing=true;
+        if(e.nav.chasing) {
+          e.nav.playerTarget.x=camera.position.x;e.nav.playerTarget.z=camera.position.z;
+          e.nav.playerTarget.y=navigation.floorAt(camera.position.x,camera.position.z,playerFeet+.05);
         }
+        let goal=null;
+        if(e.nav.chasing)goal=e.nav.playerTarget;
+        else if(!e.pack.resting) {
+          wanderGoal.x=e.home.x+e.pack.dx;wanderGoal.z=e.home.z+e.pack.dz;
+          wanderGoal.y=navigation.floorAt(wanderGoal.x,wanderGoal.z,e.home.y);
+          goal=wanderGoal;
+        }
+        motion=navigation.move(e,goal,dt,e.pace*(e.nav.chasing?1:.55),
+          e.nav.chasing?e.restDistance:.15,enemies);
       }
-      setState(e, walking ? 'walk' : 'idle');
-      e.actions.walk.timeScale = e.visibleToPlayer ? 0.92 : 0.67;
+      if(motion==='air'&&e.actions.jump_down) {
+        setState(e,'jump_down');
+        const action=e.actions.jump_down,jump=e.nav.travel;
+        action.paused=true;
+        action.time=action.getClip().duration*(jump?Math.min(.92,jump.time/jump.spec.duration):0);
+      } else if(motion==='land'&&e.actions.stand_up) {
+        setState(e,'stand_up');
+        e.actions.stand_up.setEffectiveTimeScale(1);
+      } else setState(e,motion==='walk'?'walk':'idle');
+      e.actions.walk.timeScale = e.nav.chasing ? 0.92 : 0.67;
       // The four original species have no authored idle in FishDefine.
       const breath =
         e.state === 'idle' && !e.type.idle ? Math.sin(time * 2.1 + e.phase) * 0.009 : 0;
-      e.holder.position.y = e.groundOffset + breath;
+      // Species without authored jump poses keep their own rig; a small
+      // landing compression supplies weight without inventing bone clips.
+      e.holder.position.y = e.groundOffset + breath -
+        (motion==='land'&&!e.actions.stand_up ? Math.sin(Math.PI*e.nav.landing/e.nav.landDuration)*.055 : 0);
       e.animDebt += dt;
       if (e.animDebt >= (inFrame && distance < 30 ? 1 / 60 : inFrame ? 1 / 24 : 1 / 8)) {
         e.mixer.update(e.animDebt);

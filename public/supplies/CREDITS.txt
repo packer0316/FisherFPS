@@ -1,0 +1,35 @@
+Boss supply crate
+Source supplied by the project owner:
+C:/Users/jaorenhuang/Desktop/專案素材/殭屍魚機/模型/空投物資/
+  Airdrop_box.c3b
+  Airdrop_box_2D_View.jpg
+
+airdrop.glb is a local conversion retaining source mesh, skinning, texture and
+animation. C3B positions are converted from centimetres to metres.
+Runtime normalizes the wait pose to a 1.02 metre footprint.
+tools/convert_cocos_zombies.mjs --supply <source folder> rebuilds this GLB.
+The source is user-provided project material; no third-party licence is inferred.
+
+Animation reference:
+TMDC_Zombie/ClientCocos/ZombieLua/Define/FishDefine.lua
+MachineGunSupply, 30 fps:
+  wait     80-140
+  warning 150-190
+  dead    200-260
+The parachute start interval 10-70 is never bound or played at runtime.
+
+Original permanent effect (unmodified binaries / texture):
+TMDC_Zombie/ClientCocos/ZombieResource/Effekseer_ZB/
+  special_vfx.efk
+  special_vfx_1.efkmat
+  vfx_fire_flow_6.png
+Referenced by:
+ClientCocos/ZombieLua/Define/EfkSettingDefine/FishMachineGunSupplyEfkSetting.lua
+BodyEfk: local rotation X=-90 degrees, scale60, duration=-1.
+Runtime uses scale60 * .01 * normalized model scale, at the crate base,
+following its position and yaw. The existing shared Effekseer context manages
+eight bounded handles; collecting, expiry and level cleanup stop these handles.
+
+Additional ground halo, vertical locator and 12 rising motes per crate are
+procedural project shaders. No extra point lights, bloom pass, or external
+assets are required. Mesh/buffer data and the Effekseer effect are loaded once.
