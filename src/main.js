@@ -14,6 +14,7 @@ import { loadBossSupplies, makeSupplyEffects } from './boss-supplies.js';
 import { $, gunIcon, makeRadar } from './ui.js';
 import { emit } from './events.js';
 import { makeLookInput, requestRawPointerLock } from './look-input.js';
+import { makeDamageFeedback } from './damage-feedback.js';
 
 async function boot() {
   const canvas = $('world'),
@@ -52,6 +53,7 @@ async function boot() {
   let warden=null, supplies=null;
   let bossVictory=null;
   const supplyEffects=makeSupplyEffects();
+  const damageFeedback=makeDamageFeedback($('damage-overlay'));
   const economy = {
     wallet: 1000,
     kills: 0,
@@ -228,6 +230,7 @@ async function boot() {
   }
   function setMode(next) {
     mode = next;
+    if (next !== 'play' && next !== 'result') damageFeedback.clear();
     if (next !== 'play') setScope(false);
     stopInput();
     lock = null;
@@ -330,7 +333,7 @@ async function boot() {
     flashLeft=rewardLeft=toastLeft=scanLeft=0;lock=null;stopInput();
     view.setWorld(scene,world.sun);particles.clearWorld();
     $('boss-health').hidden=$('player-health').hidden=!warden;
-    $('app').classList.remove('hurt');
+    damageFeedback.clear();
     $('app').classList.toggle('prison',!!warden);
     $('app').classList.toggle('castle',!!world.castle);
     $('boss-name').textContent=warden?.target.type.name??'';
@@ -378,7 +381,7 @@ async function boot() {
   function playerHit(hp){
     if(bossVictory)return;
     $('health-value').textContent=hp;
-    $('app').classList.remove('hurt');void $('app').offsetWidth;$('app').classList.add('hurt');
+    damageFeedback.hit();
     if(hp===0)finishChallenge(false);
   }
   function finishChallenge(won){
@@ -1076,54 +1079,59 @@ async function boot() {
   $('loading').hidden = true;
   let shadowLeft = 0;
   function frame(now) {
-    const real = (now - last) / 1000,
-      dt = Math.min(0.06, Math.max(0, real));
+    const real = Math.max(0, (now - last) / 1000);
     last = now;
     if (document.hidden) return;
+    const elapsed = damageFeedback.advance(real),
+      dt = Math.min(0.06, elapsed),
+      uiDt = Math.min(0.06, real);
     clock += dt;
     updateScope(dt);
-    const playing = mode === 'play';
+    const playing = mode === 'play', simulating = playing && dt > 0;
     if (playing) {
+      // Consume look input on EVERY rendered frame, including the impact pause.
       applyLook(performance.now(),real*1000);
+    }
+    if (simulating) {
       supplyEffects.update(dt);
-      const elapsed = Math.min(0.12, Math.max(0, real));
-      const steps = Math.ceil(elapsed * 120);
-      for (let i = 0; i < steps; i++) movement(elapsed / steps);
+      const movementTime = Math.min(0.12, elapsed);
+      const steps = Math.ceil(movementTime * 120);
+      for (let i = 0; i < steps; i++) movement(movementTime / steps);
       kickPitch *= Math.exp(-dt * 12);
       kickYaw *= Math.exp(-dt * 14);
       tremor *= Math.exp(-dt * tremorDecay);
       tremorTime += dt;
-      cameraPose();
     }
-    if (playing || mode === 'ready') {
+    if (playing) cameraPose();
+    if (simulating || mode === 'ready') {
       world.breeze.value += dt;
       if(playing && warden)world.updateGates?.(dt);
       hunt.update(dt, clock, playing, camera, economy.wave, feet);
     }
-    if (playing) {
+    if (simulating) {
       aimAndFire(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
       if (mag() === 0 && reloadLeft === 0) reload();
       // The boss reward is a separate presentation; normal play and supplies continue.
       if(mode==='play')supplies?.update(dt,player,feet);
     }
-    if(warden&&mode==='play')warden.update(dt,player,playerHit,()=>finishChallenge(true));
-    fx.update(playing ? dt : 0);
-    if (playing) {
+    if(warden&&mode==='play'&&simulating)warden.update(dt,player,playerHit,()=>finishChallenge(true));
+    fx.update(simulating ? dt : 0);
+    if (simulating) {
       rewardCoins.update(dt, particles.playCoinPickup, creditBossCoin);
       particles.update(dt);
       // Update before revealing so the first visible score frame is exactly 1.
       updateBossPrize(dt);
       if(rewardCoins.takeBossReveal())revealBossPrize();
     }
-    uiLeft -= dt;
+    uiLeft -= uiDt;
     if (uiLeft <= 0) {
       ui();
       uiLeft = 0.095;
     }
-    flashLeft -= dt;
-    rewardLeft -= dt;
-    toastLeft -= dt;
+    flashLeft -= uiDt;
+    rewardLeft -= uiDt;
+    toastLeft -= uiDt;
     $('hitmark').style.opacity = String(Math.max(0, flashLeft * 8));
     $('reward').style.opacity = String(Math.max(0, Math.min(1, rewardLeft * 2)));
     if (toastLeft <= 0) $('toast').style.display = 'none';
@@ -1154,8 +1162,8 @@ async function boot() {
       mag(),
     );
     if (playing) {
-      slow = real > 0.032 ? slow + dt : Math.max(0, slow - dt * 0.7);
-      readyToScale -= dt;
+      slow = real > 0.032 ? slow + uiDt : Math.max(0, slow - uiDt * 0.7);
+      readyToScale -= uiDt;
       if (slow > 1.5 && readyToScale <= 0 && renderer.getPixelRatio() > 0.8) {
         renderer.setPixelRatio(Math.max(0.8, renderer.getPixelRatio() * 0.85));
         // setPixelRatio already resizes the backing buffer. The CSS size, camera

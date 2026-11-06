@@ -160,19 +160,17 @@
 #app.prison .wave {
   display: none;
 }
-#app.hurt:after {
-  content: '';
+#damage-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 4;
-  box-shadow: inset 0 0 65px #af221e99;
-  animation: prison-hit 0.42s ease-out forwards;
-}
-@keyframes prison-hit {
-  to {
-    opacity: 0;
-  }
+  z-index: 5;
+  opacity: 0;
+  will-change: opacity;
+  box-shadow:
+    inset 0 0 0 3px #f047389e,
+    inset 0 0 clamp(35px, 8vmin, 85px) clamp(6px, 1.8vmin, 20px) #b80d17c4;
+  background: radial-gradient(ellipse at center, transparent 44%, #a80a1240 76%, #9e0614ad 100%);
 }
 @media (max-height: 550px) {
   #boss-health {
