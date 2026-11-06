@@ -188,8 +188,11 @@ export function makeEffects(scene, playBlood, rubble = null) {
     t.obj.quaternion.setFromUnitVectors(up, t.velocity);
   }
   function groundBurst(at, strength, attack, origin) {
-    if (attack) rubble?.burst(at, strength, attack, origin);
-    const count = attack ? 12 : 6;
+    // Traveling boss fronts own their pooled fragments; don't spawn an entire
+    // 30-piece legacy lane on every 3-metre segment.
+    const front=['fracture','pulse','magic'].includes(attack);
+    if (attack && !front) rubble?.burst(at, strength, attack, origin);
+    const count = front ? 3 : attack ? 12 : 6;
     for (let i = 0; i < count; i++) {
       const angle = (i + Math.random() * 0.65) * 2 * Math.PI / count;
       const dx = Math.cos(angle), dz = Math.sin(angle);
@@ -197,7 +200,7 @@ export function makeEffects(scene, playBlood, rubble = null) {
       let x = at.x, z = at.z;
       let radius = (0.35 + Math.random() * 0.57) * strength;
       if (attack === 'circle') radius = 2.2 + Math.random() * 1.4;
-      else if (attack) {
+      else if (attack && !front) {
         const along = (i + Math.random()) / count;
         x = T.MathUtils.lerp(origin.x, at.x, along);
         z = T.MathUtils.lerp(origin.z, at.z, along);

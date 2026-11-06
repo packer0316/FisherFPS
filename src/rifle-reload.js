@@ -89,8 +89,8 @@ export function makeRifleReload(rig, mag, spare, bolt) {
   const lug = v(0,-.055,-.555).sub(home), pivot = v(), xAxis = v(1,0,0), roll = new T.Quaternion();
   const gripWrist = grasp.point.clone().sub(grasp.offset.clone().applyQuaternion(grasp.orientation));
   const carriedWrist = v();
-  // Reuse the two existing magazine meshes. The dropped mesh rotates about
-  // its centre of mass and is recycled only after it has left the screen.
+  // Reuse the two magazines. Let the spent one slip from the relaxed hand:
+  // retain its release pose, with gravity and only a tiny residual angular drift.
   rig.updateMatrixWorld(true);
   const dropPivot = new T.Box3().setFromObject(mag).getCenter(v()).sub(home);
   const fallingCenter = v(), dropSpin = new T.Euler();
@@ -133,13 +133,13 @@ export function makeRifleReload(rig, mag, spare, bolt) {
       mag.position.copy(mount.position);
       mag.quaternion.copy(mount.quaternion).multiply(seated);
     } else {
-      const elapsed = (phase-drop)*2.35;
+      const elapsed = (phase-drop)*2.35*(empty ? 1 : .86);
       fallingCenter.copy(dropPivot).applyQuaternion(mount.quaternion).add(mount.position);
-      fallingCenter.x -= 1.2*elapsed;
-      fallingCenter.y -= .10*elapsed + 3.8*elapsed*elapsed;
-      fallingCenter.z -= .18*elapsed;
+      fallingCenter.x -= .025*elapsed;
+      fallingCenter.y -= .035*elapsed + .5*9.81*elapsed*elapsed;
+      fallingCenter.z += .015*elapsed;
       mag.quaternion.copy(mount.quaternion).multiply(roll.setFromEuler(
-        dropSpin.set(1.8*elapsed,-6*elapsed,-2.8*elapsed)));
+        dropSpin.set(.14*elapsed,-.10*elapsed,.08*elapsed)));
       mag.position.copy(fallingCenter).sub(pivot.copy(dropPivot).applyQuaternion(mag.quaternion));
       mag.quaternion.multiply(seated);
     }

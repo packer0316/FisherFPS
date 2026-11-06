@@ -116,6 +116,70 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     for(const s of officerSlots){s.handle?.stop();s.handle=null;s.anchor=null;}
     officerVisible=false;
   }
+  const brideSlots=slots(20);
+  const brideSpecs={
+    intro:['Z_037_Ingame',4.34],
+    summon:['Z_037_Middle_reward_0',7.34],
+    soul:['Z_037_Middle_reward',7.34],
+    burst:['Z_037_Big_reward',7],
+    out:['Z_037_out',5.34],
+    ghost:['Z_018_Ghost',1.8],
+    hit:['Z_18_Sphere_Hit',1],
+  };
+  let brideAssets,loadingBride,brideVisible=false;
+  function loadBride() {
+    loadingBride??=Promise.all(Object.entries(brideSpecs).map(async([key,[file]])=>
+      [key,await load(world,'/castle/fx/'+file+'.efk',1)]))
+      .then(entries=>{brideAssets=Object.fromEntries(entries);renderer.resetState();})
+      .catch(error=>{loadingBride=null;throw error;});
+    return loadingBride;
+  }
+  function brideFx(name,anchor,life=brideSpecs[name][1]) {
+    if(!brideAssets)return;
+    const slot=brideSlots.find(s=>!s.handle)??brideSlots.reduce((a,b)=>a.age>b.age?a:b);
+    slot.handle?.stop();
+    anchor.updateWorldMatrix(true,false);
+    slot.handle=world.play(brideAssets[name],0,0,0);
+    slot.handle?.setMatrix(anchor.matrixWorld.elements);
+    slot.anchor=anchor;slot.age=0;slot.life=life;
+    if(slot.handle)brideVisible=true;
+  }
+  function stopBride() {
+    for(const s of brideSlots){s.handle?.stop();s.handle=null;s.anchor=null;}
+    brideVisible=false;
+  }
+  // CC0 Effekseer materials, loaded once for boss arenas. Fixed handles prevent
+  // a multi-segment fissure from growing the native particle arena unboundedly.
+  const bossSlots=slots(6);
+  let bossAssets,loadingBoss,bossVisible=false;
+  function loadBossImpacts(){
+    loadingBoss??=Promise.all(['ef_fire02','ef_parts_hit01'].map(file=>
+      load(world,'/effects/boss-impacts/'+file+'.efk',1)))
+      .then(effects=>{bossAssets=effects;renderer.resetState();})
+      .catch(error=>{loadingBoss=null;throw error;});
+    return loadingBoss;
+  }
+  function bossImpact(theme,point,scale=1){
+    if(!bossAssets)return;
+    // These source effects spawn children over time. Reserve room for blood,
+    // supplies and the original boss aura instead of starving the native arena.
+    const limit=theme==='bride'?4:1;
+    let active=0;
+    for(const entry of bossSlots)if(entry.handle)active++;
+    if(active>=limit || world.getRestInstancesCount()<320)return;
+    const slot=bossSlots.find(s=>!s.handle);
+    if(!slot)return;
+    slot.handle=world.play(bossAssets[theme==='bride'?1:0],point.x,point.y,point.z);
+    slot.handle?.setScale(scale,scale,scale);
+    slot.handle?.setRotation(0,Math.random()*Math.PI*2,0);
+    if(theme==='bride')slot.handle?.setAllColor(155,65,255,255);
+    slot.age=0;slot.life=theme==='bride'?.75:1.05;
+    if(slot.handle)bossVisible=true;
+  }
+  function stopBossImpacts(){
+    for(const slot of bossSlots){slot.handle?.stop();slot.handle=null;}
+    bossVisible=false;
+  }
   const origin = new Vector3();
   let cooldown = 0, bloodVisible = false, pickupVisible = false, clearPickup = false;
   function playBlood(position, normal, target) {
@@ -172,8 +236,13 @@ export async function loadCombatParticles(renderer, walletCanvas) {
       const slot=supplySlots[i];
       if(slot.anchor)supplyFx(i,slot.anchor,slot.alpha);
     }
-    if (bloodVisible || officerVisible || supplyVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible) {
       if (officerVisible) syncWardenEffects();
+      if(brideVisible)for(const slot of brideSlots)if(slot.handle&&slot.anchor) {
+        slot.anchor.updateWorldMatrix(true,false);slot.handle.setMatrix(slot.anchor.matrixWorld.elements);
+      }
+      brideVisible=advance(brideSlots,dt,1);
+      bossVisible=advance(bossSlots,dt,1);
       bloodVisible=advance(impacts,dt,1);officerVisible=advance(officerSlots,dt,1);
       world.update(dt*60);
     }
@@ -184,7 +253,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     }
   }
   function render(camera) {
-    if (bloodVisible || officerVisible || supplyVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible) {
       world.setProjectionMatrix(camera.projectionMatrix.elements);
       world.setCameraMatrix(camera.matrixWorldInverse.elements);
       world.draw();
@@ -199,12 +268,15 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   }
   function clearWorld(){
     stopWarden();
+    stopBride();
+    stopBossImpacts();
     for(let i=0;i<supplySlots.length;i++)supplyFx(i,null);
     supplyVisible=false;
     for(const pool of [impacts,pickups])for(const s of pool){s.handle?.stop();s.handle=null;}
     bloodVisible=pickupVisible=false;clearPickup=true;cooldown=0;
     world.update(1);hud.update(1);
   }
-  return { playBlood, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx };
+  return { playBlood, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx,
+    loadBride,brideFx,stopBride,loadBossImpacts,bossImpact,stopBossImpacts };
 }
 

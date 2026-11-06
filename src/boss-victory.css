@@ -1,0 +1,44 @@
+
+/* Keep world coins and the wallet readable during the victory performance. */
+#boss-result.victory {background:#03051073;backdrop-filter:none;pointer-events:none;}
+.victory .result-window {
+  position:relative;width:min(460px,70vw);padding:12px 24px 20px;
+  text-align:center;overflow:visible;max-height:none;border:0;border-radius:0;
+  background:radial-gradient(ellipse at 50% 63%,#11101dca 0%,#11101d85 43%,#11101d00 73%);
+  box-shadow:none;animation:prize-reveal .5s cubic-bezier(.16,.8,.22,1) both;
+}
+#victory-art {height:clamp(180px,39vh,370px);position:relative;}
+#victory-art img {height:100%;width:100%;object-fit:contain;position:relative;filter:drop-shadow(0 5px 24px #cda26855);}
+.victory-halo {position:absolute;inset:6% 4% -7%;border-radius:50%;background:radial-gradient(ellipse,#c07aa633,#d5a86619 40%,transparent 69%);}
+.victory #result-title {font-size:clamp(20px,3vw,28px);color:#f5d9ad;text-shadow:0 2px 12px #000;outline:none;}
+#victory-score > span {display:block;color:#d8c0a2;font-size:11px;letter-spacing:.22em;margin:13px 0 3px;}
+#victory-amount {
+  display:block;font:800 clamp(48px,7vw,74px)/1 BarlowC,sans-serif;
+  font-variant-numeric:tabular-nums;color:#ffe7b0;letter-spacing:.03em;
+  text-shadow:0 2px 0 #764c2c,0 0 25px #eeb84d77;
+}
+.victory-track {width:140px;height:2px;background:#dac8b329;margin:13px auto 0;overflow:hidden;}
+#victory-progress {display:block;height:100%;width:0;background:#e5bc77;box-shadow:0 0 9px #edb35d;}
+.victory #result-detail {font-size:12px;color:#d6cbc0;min-height:18px;margin:12px 0;}
+/* Only the delayed home button intercepts input; the rest of the performance stays passive. */
+.victory button {display:none;}
+.victory #victory-home {display:inline-flex;align-items:center;justify-content:center;gap:14px;pointer-events:auto;padding:11px 24px;margin-top:8px;animation:prize-reveal .25s ease-out both;}
+.victory #victory-home kbd {font-size:10px;opacity:.7;}
+@media(pointer:coarse) {.victory #victory-home kbd {display:none;}}
+.settling .vitals {z-index:10;box-shadow:0 0 24px #d4aa5722;}
+.settling #boss-health {visibility:hidden;}
+@keyframes prize-reveal {from {opacity:0;transform:translateY(20px) scale(.88);}to {opacity:1;transform:none;}}
+@media(max-height:550px) {
+  .victory .result-window {width:340px;padding:0 12px 8px;}
+  #victory-art {height:140px;}
+  .victory #result-title {font-size:20px;}
+  #victory-score > span {margin-top:7px;font-size:10px;}
+  #victory-amount {font-size:44px;}
+  .victory-track {margin-top:7px;}
+  .victory #result-detail {margin:7px 0;font-size:11px;}
+}
+@media(max-width:540px) {
+  .victory .result-window {width:90vw;}
+  #victory-art {height:31vh;}
+}
+@media(prefers-reduced-motion:reduce) {.victory .result-window {animation:none;}}

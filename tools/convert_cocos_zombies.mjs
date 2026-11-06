@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { Matrix4, Vector3, Quaternion } from 'three';
 
 const supplyDirectory = process.argv[2] === '--supply' ? process.argv[3] : null;
+const brideDirectory = process.argv[2] === '--bride' ? process.argv[3] : null;
 const source = process.argv[2];
 if (!source) throw new Error('Pass the TMDC_Zombie directory as the first argument.');
 const output = fileURLToPath(new URL(supplyDirectory ? '../public/supplies/' : '../public/monsters/', import.meta.url));
 fs.mkdirSync(output, { recursive: true });
-const officerDirectory = supplyDirectory ? null : process.argv[3];
-const characters = supplyDirectory ? [
+const officerDirectory = supplyDirectory || brideDirectory ? null : process.argv[3];
+const characters = brideDirectory ? [
+  ['bride', '', 'Eternal_Bride', 'Eternal_Basecolor'],
+] : supplyDirectory ? [
   ['airdrop', '', 'Airdrop_box', 'Airdrop_box_2D_View'],
 ] : officerDirectory ? [
   ['warden', 'Prison_officer', 'Prison_officer', 'Prison_officer_Base_color'],
@@ -20,7 +23,7 @@ const characters = supplyDirectory ? [
   ['raider', 'Thief', 'Grave_robber', 'Grave_robber'],
 ];
 for (const [key, folder, model, skin] of characters) {
-  const dir = supplyDirectory ?? officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
+  const dir = brideDirectory ?? supplyDirectory ?? officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
   const data = fs.readFileSync(path.join(dir, model + '.c3b'));
   if (!data.subarray(0, 6).equals(Buffer.from([67, 51, 66, 0, 0, 7])))
     throw new Error('Expected C3B 0.7');
@@ -183,11 +186,11 @@ for (const [key, folder, model, skin] of characters) {
     const parts = u32();
     for (let j = 0; j < parts; j++) {
       const prim = primitives.get(string());
-      string();
+      const materialName = string();
       if (!prim) throw new Error('Missing character mesh partition');
       const draw = parts === 1 ? n : { name: name + '_part' + j };
       if (draw !== n) drawNodes.push(gltf.nodes.push(draw) - 1);
-      draw.mesh = gltf.meshes.push({ primitives: [prim] }) - 1;
+      draw.mesh = gltf.meshes.push({ name: materialName, primitives: [{...prim}] }) - 1;
       const bones = read(u32(), () => ({ name: string(), inverse: read(16, f32) }));
       if (bones.length) bindings.push({ node: draw, bones });
       const uvMaps = u32();
@@ -245,9 +248,16 @@ for (const [key, folder, model, skin] of characters) {
   }
   gltf.animations.push(anim);
   gltf.images.push({
-    mimeType: 'image/jpeg',
-    bufferView: bufferView(fs.readFileSync(path.join(dir, skin + '.jpg'))),
+    mimeType: brideDirectory ? 'image/png' : 'image/jpeg',
+    bufferView: bufferView(fs.readFileSync(path.join(dir, skin + (brideDirectory ? '.png' : '.jpg')))),
   });
+  if (brideDirectory) {
+    gltf.images.push({mimeType:'image/jpeg',bufferView:bufferView(fs.readFileSync(path.join(dir,'moon_Base_Color.jpg')))});
+    gltf.textures.push({source:1});
+    gltf.materials.push({name:'Moon',pbrMetallicRoughness:{baseColorTexture:{index:1},metallicFactor:.25,roughnessFactor:.6}});
+    // FishEternalBrideSprite.lua: mesh 0 is the moon; meshes 1–3 share the bride skin.
+    gltf.meshes[0].primitives[0].material=1;
+  }
   gltf.buffers.push({ byteLength: bytes });
   const json = Buffer.from(JSON.stringify(gltf));
   const jsonSize = Math.ceil(json.length / 4) * 4;

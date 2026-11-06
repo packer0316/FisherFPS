@@ -68,7 +68,7 @@ export function makeRadar(world, player) {
     ink.lineTo(64, z);
     ink.stroke();
   }
-  for (const p of world.prison ? [] : terrainPatches) {
+  for (const p of world.bossArena ? [] : terrainPatches) {
     ink.fillStyle = p.pit ? '#484b40' : p.bridge ? '#676d57' : '#505d4f';
     ink.fillRect(p.x0, p.z0, p.x1 - p.x0, p.z1 - p.z0);
   }
@@ -86,7 +86,7 @@ export function makeRadar(world, player) {
   ink.textAlign = 'center';
   ink.font = 'bold 4px sans-serif';
   ink.fillStyle = '#e8ab66';
-  if (world.prison) ink.fillText('C', 0, -22);
+  if (world.bossArena) ink.fillText(world.castle?'II':'C', 0, -22);
   else { ink.fillText('A', 40, -26); ink.fillText('B', -40, -26); }
   return (enemies) => {
     ctx.fillStyle = '#24312e';

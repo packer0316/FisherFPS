@@ -1,6 +1,8 @@
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { frameClip } from './hunt.js';
+import { makeBossHazards, containsBossHazard, clipBossLane } from './boss-hazards.js';
+import { makeBossImpactEffects } from './boss-impact-effects.js';
 import officerFragment from './shaders/prison/prisonOfficer.frag?raw';
 
 const frames = {
@@ -69,80 +71,6 @@ function officerMaterial(base, atlas) {
   });
 }
 
-// The CPU hit test and the projected floor marker both use these same local dimensions.
-function dangerZone(scene) {
-  const uniforms = {
-    progress: { value: 0 },
-    circle: { value: 0 },
-    impact: { value: 0 },
-    clock: { value: 0 },
-  };
-  const mat = new T.ShaderMaterial({
-    uniforms,
-    transparent: true,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -3,
-    vertexShader:
-      'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `varying vec2 vUv;uniform float progress,circle,impact,clock;
-      void main(){
-        vec2 p=vUv*2.-1.;float d=circle>.5?length(p):max(abs(p.x),abs(p.y));
-        if(d>1.)discard;
-        float edge=smoothstep(.89,.98,d),pulse=.5+.5*sin(clock*10.);
-        float stripe=smoothstep(.62,.68,fract((vUv.y+abs(p.x)*.048)*10.-clock*.52));
-        float sweep=circle>.5?1.-smoothstep(.015,.080,abs(length(p)-progress)):
-          1.-smoothstep(.025,.095,abs(vUv.y-(1.-progress)));
-        float alpha=.21+.07*pulse+.43*edge+.16*stripe+.21*sweep;
-        vec3 color=mix(vec3(.91,.022,.038),vec3(1.,.30,.11),edge*.65+sweep*.35);
-        gl_FragColor=vec4(mix(color,vec3(1.,.70,.29),impact),min(.88,alpha+impact*.16));
-      }`,
-  });
-  const mesh = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat);
-  mesh.visible = false;
-  mesh.renderOrder = 4;
-  scene.add(mesh);
-  const impactPoint = new T.Vector3();
-  let circle = false,
-    length = 0,
-    halfWidth = 0,
-    dx = 0,
-    dz = 1,
-    x = 0,
-    z = 0;
-  function mark(origin, aim, round, enraged) {
-    circle = round;
-    impactPoint.set(aim.x, 0.12, aim.z);
-    const vx = aim.x - origin.x,
-      vz = aim.z - origin.z,
-      dist = Math.hypot(vx, vz);
-    dx = dist > 0 ? vx / dist : 0;
-    dz = dist > 0 ? vz / dist : 1;
-    x = circle ? aim.x : origin.x;
-    z = circle ? aim.z : origin.z;
-    halfWidth = circle ? (enraged ? 4.2 : 3.8) : enraged ? 2.15 : 1.9;
-    length = circle ? 2 * halfWidth : Math.min(71, Math.max(12, dist + 6));
-    mesh.position.set(
-      x + (circle ? 0 : (dx * length) / 2),
-      0.04,
-      z + (circle ? 0 : (dz * length) / 2),
-    );
-    mesh.rotation.y = Math.atan2(dx, dz);
-    mesh.scale.set(2 * halfWidth, 1, length);
-    uniforms.circle.value = Number(circle);
-    uniforms.progress.value = uniforms.impact.value = 0;
-    mesh.visible = true;
-  }
-  function contains(p) {
-    const vx = p.x - x,
-      vz = p.z - z;
-    if (circle) return vx * vx + vz * vz <= halfWidth * halfWidth;
-    const along = vx * dx + vz * dz;
-    return along >= 0 && along <= length && Math.abs(vx * dz - vz * dx) <= halfWidth;
-  }
-  return { mesh, uniforms, mark, contains, impactPoint };
-}
-
 export async function loadWarden(scene, world, particles, groundImpact) {
   const [asset, atlas] = await Promise.all([
     new GLTFLoader().loadAsync('/monsters/warden.glb'),
@@ -203,7 +131,10 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     groundY: 0,
     boss: true,
   };
-  const zone = dangerZone(scene);
+  const impactFX=await makeBossImpactEffects(scene,particles,'warden');
+  const hazards = makeBossHazards(scene,{count:4,theme:'warden'});
+  let zone, zoneIndex=0, damageCooldown=0;
+  const contactPoint=new T.Vector3(),contactOrigin=new T.Vector3();
   const footsteps = ['Bip001_L_Toe0', 'Bip001_R_Toe0'].map((name) => ({
     bone: model.getObjectByName(name),
     position: new T.Vector3(),
@@ -248,6 +179,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     state = 'intro';
     time = cycle = 0;
     trackingPlayer = followUp = false;
+    zoneIndex=damageCooldown=0;
     velocity.set(0, 0);
     hp = 100;
     for (const foot of footsteps) foot.raised = false;
@@ -258,7 +190,8 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     root.rotation.set(0, 0, 0);
     root.visible = true;
     mat.uniforms.u_bleachRate.value = 0;
-    zone.mesh.visible = false;
+    hazards.clear();
+    impactFX.clear();
     play('ingame', 0);
     mixer.update(0);
     particles.wardenFx('aura', effectMount);
@@ -278,7 +211,11 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       if (world.blocked(x, z)) break;
       aim.set(x, 0, z);
     }
-    zone.mark(root.position, aim, circle, enraged);
+    const spec=circle?{shape:'circle',x:aim.x,z:aim.z,radius:enraged?5.1:4.5,inner:0,
+      duration:.52,steps:6,kind:'quake'}:clipBossLane(root.position,aim,world.navigationBounds);
+    if(!circle)Object.assign(spec,{width:enraged?4.3:3.8,duration:Math.min(1.15,spec.length/27),
+      steps:Math.max(3,Math.ceil(spec.length/3.2)),kind:'fracture'});
+    zone=hazards.mark(zoneIndex++%hazards.pool.length,spec,contactTime-warningStart);
     state = 'warning';
     time = 0;
   }
@@ -299,11 +236,12 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     }
     previousPlayer.set(player.x, player.z);
     trackingPlayer = true;
+    impactFX.update(dt);
     time += dt;
     mixer.update(dt);
     if (state === 'intro' || (state === 'roam' && current === 'walk')) updateFootfalls();
     mat.uniforms.u_bleachRate.value = Math.max(0, mat.uniforms.u_bleachRate.value - dt * 2.8);
-    zone.uniforms.clock.value += dt;
+    damageCooldown=Math.max(0,damageCooldown-dt);
     if (state === 'dying') {
       if (time > 3.55) {
         state = 'done';
@@ -323,6 +261,19 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       }
       return;
     }
+    hazards.update(dt,(wave,contact)=>{
+      if(!target.alive)return;
+      contactOrigin.set(contact.x,.08,contact.z);
+      contactPoint.copy(contactOrigin);
+      if(contact.shape==='line'){contactPoint.x+=contact.dx*contact.length/2;contactPoint.z+=contact.dz*contact.length/2;}
+      groundImpact(contactPoint,contact.step===0?.9:.48,'slam',
+        contact.shape==='line'?'fracture':contact.step===0?'circle':'pulse',contactOrigin);
+      impactFX.burst(wave,contact);
+      if(!wave.hit && damageCooldown<=0 && containsBossHazard(contact,player)){
+        wave.hit=true;damageCooldown=.72;hp=Math.max(0,hp-damage);onDamage(hp);
+      }
+    });
+    if(state==='off')return;
     const action = actions[current];
     const finished = action.time >= action.getClip().duration;
     if (state === 'prize') {
@@ -333,24 +284,17 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       return;
     }
     if (state === 'warning') {
-      const turn = zone.mesh.rotation.y - root.rotation.y;
+      const turn = Math.atan2(aim.x-root.position.x,aim.z-root.position.z) - root.rotation.y;
       root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-9 * dt));
-      zone.uniforms.progress.value = Math.min(1, (action.time - warningStart) / (contactTime - warningStart));
       if (action.time >= contactTime) {
         state = 'impact';
         time = 0;
         zone.uniforms.impact.value = 1;
         if (circle) {
           play('big_reward_out', 0.07);
-          particles.wardenFx('ring', holder, zone.impactPoint);
+          particles.wardenFx('ring', holder, contactPoint.set(zone.x,.12,zone.z));
         }
-        const attack = circle ? 'circle' : warningStart > 0 ? 'sweep' : 'line';
-        const strength = circle ? 1.4 : attack === 'sweep' ? 0.96 : 1.12;
-        groundImpact(zone.impactPoint, strength, 'slam', attack, root.position);
-        if (target.alive && zone.contains(player)) {
-          hp = Math.max(0, hp - damage);
-          onDamage(hp);
-        }
+
       }
       return;
     }
@@ -361,7 +305,6 @@ export async function loadWarden(scene, world, particles, groundImpact) {
         warn(player, 2.3);
         return;
       }
-      if (time >= 0.27) zone.mesh.visible = false;
       if (!finished) return;
       if (!target.alive) return startExit();
       state = 'roam';
@@ -410,7 +353,8 @@ export async function loadWarden(scene, world, particles, groundImpact) {
   function startExit() {
     state = 'dying';
     time = 0;
-    zone.mesh.visible = false;
+    hazards.clear();
+    impactFX.clear();
     particles.stopWarden();
     play('out');
     actions.out.setEffectiveTimeScale(2.5);
@@ -423,7 +367,8 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     state = 'off';
     target.alive = false;
     root.visible = false;
-    zone.mesh.visible = false;
+    hazards.clear();
+    impactFX.clear();
     particles.stopWarden();
   }
   function cue() {
@@ -431,8 +376,8 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       ? '典獄長進場'
       : state === 'warning'
         ? circle
-          ? '圓形震擊'
-          : warningStart > 0 ? '回掃追擊' : '直線重擊'
+          ? '崩地震擊：離開紅圈'
+          : warningStart > 0 ? '二連裂地：再次側移' : '裂地爆破：向側邊閃避'
         : state === 'dying'
           ? '典獄長已倒下'
           : '';

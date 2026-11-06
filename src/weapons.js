@@ -7,6 +7,7 @@ import { installKnife, knifeContactTime } from './knife.js';
 import { installWeapon } from './weapon-rig.js';
 import { muzzleFlash } from './muzzle-flash.js';
 import { getSmokeTexture } from './effects.js';
+import { warmRender } from './render-warmup.js';
 
 export const startingWeapon = 'rifle';
 export const weapons = {
@@ -281,5 +282,11 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     renderer.render(scene, camera);
   }
   function setWorld(scene, light) { worldScene=scene; sun=light; }
-  return { render, equip, shoot, muzzleOrigin, isReady, setWorld, meleeImpact: rigs.knife.impact };
+  async function warmup(renderer) {
+    scene.environment=worldScene.environment;
+    // Includes hidden weapons, muzzle sprites and casings before the first shot.
+    await renderer.compileAsync(scene,camera);
+    await warmRender(renderer,scene,camera);
+  }
+  return { render, equip, shoot, muzzleOrigin, isReady, setWorld, warmup, meleeImpact: rigs.knife.impact };
 }

@@ -3,6 +3,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { makeHuntNavigation } from './hunt-navigation.js';
+import { addCastleCharacterLight } from './castle-character-light.js';
+import { makeAnimatedRaycast } from './animated-raycast.js';
+import { warmRender } from './render-warmup.js';
 
 const types = [
   {
@@ -101,6 +104,19 @@ export async function loadHunt(scene, world, boss = null) {
   speciesLibrary ??= loadSpecies().catch(error => { speciesLibrary = null; throw error; });
   const library = await speciesLibrary;
   const assets = library.map(species => species.scene);
+  if(world.castle) {
+    for(let i=0;i<assets.length;i++) {
+      assets[i]=clone(assets[i]);
+      const variants=new Map();
+      assets[i].traverse(o=>{
+        if(!o.isMesh)return;
+        if(!variants.has(o.material)) {
+          const m=o.material.clone();addCastleCharacterLight(m,.34);variants.set(o.material,m);
+        }
+        o.material=variants.get(o.material);
+      });
+    }
+  }
   if (world.prison) {
     // Share geometry, clips and original skins between levels. Only the two uniforms differ.
     await Promise.all(['inmate-man.jpg', 'inmate-woman.jpg'].map(async (name, i) => {
@@ -121,14 +137,15 @@ export async function loadHunt(scene, world, boss = null) {
     }));
   }
   for (const mesh of world.zones) {
-    computeBoundsTree.call(mesh.geometry, { targetLeafSize: 16 });
-    mesh.raycast = acceleratedRaycast;
+    if(!mesh.geometry.boundsTree)computeBoundsTree.call(mesh.geometry, { targetLeafSize: 16 });
+    if(!mesh.isInstancedMesh)mesh.raycast = acceleratedRaycast;
   }
   const enemies = [], targets = boss ? [boss] : enemies,
     ray = new T.Raycaster(),
     blockHits = [];
   ray.firstHitOnly = true;
   const navigation=makeHuntNavigation(world);
+  if(boss)boss.hitTest=makeAnimatedRaycast(boss.model);
   const pos = new T.Vector3(),
     projected = new T.Vector3(),
     eyeDir = new T.Vector3(),
@@ -196,7 +213,9 @@ export async function loadHunt(scene, world, boss = null) {
     return {
       root,
       nav: navigation.createState(),
+      command: {active:false,time:0,speed:1,goal:new T.Vector3()},
       model,
+      hitTest:makeAnimatedRaycast(model),
       mixer,
       actions,
       holder,
@@ -277,10 +296,11 @@ export async function loadHunt(scene, world, boss = null) {
     return fallback ? nearbyFallback : null;
   }
   function populate(camera) {
-    if (world.prison) {
-      world.resetGates();
-      for(let i=0;i<8;i++){
-        const a = i * Math.PI / 4 + .31, x = Math.cos(a) * 13, z = Math.sin(a) * 13;
+    if (world.bossArena) {
+      world.resetGates?.();
+      for(let i=0;i<(world.population??8);i++){
+        const a = i * Math.PI / (world.castle?3:4) + .31,
+          x = Math.cos(a) * (world.castle?15:13), z = Math.sin(a) * (world.castle?11:13)-(world.castle?8:0);
         const type = types[i % types.length];
         const spot = homeSpot(x, z, type.height, camera.position, enemies[i]) ?? candidate.set(x, .015, z);
         if (!enemies[i]) {
@@ -290,6 +310,9 @@ export async function loadHunt(scene, world, boss = null) {
           enemies.push(e);targets.push(e);
         }
         beginEntry(enemies[i],spot,camera,1,i<2);
+        if(i>=(world.basePopulation??8)) {
+          const e=enemies[i];e.alive=false;e.finished=true;e.root.visible=false;e.entry=null;
+        }
       }
       return;
     }
@@ -322,8 +345,9 @@ export async function loadHunt(scene, world, boss = null) {
   function maintainPopulation(dt, camera, wave) {
     refillIn -= dt;
     if (refillIn > 0) return;
-    if (world.prison) {
+    if (world.bossArena) {
       refillIn=.48;
+      if(world.castle && enemies.filter(e=>!e.finished).length>=world.basePopulation)return;
       const e=enemies.find(actor=>actor.finished);
       if(!e)return;
       const spot=localSpot(camera,e.height,e) ?? homeSpot(e.anchor.x,e.anchor.z,e.height,camera.position,e);
@@ -369,8 +393,7 @@ export async function loadHunt(scene, world, boss = null) {
     next.play();
     previous.crossFadeTo(next, state === 'dead' ? 0.08 : 0.18, false);
   }
-  function setOpacity(e, alpha) {
-    if (alpha === e.opacity) return;
+  function prepareFade(e) {
     if (!e.fadeBindings) {
       const copies = new Map();
       e.fadeBindings = [];
@@ -379,6 +402,10 @@ export async function loadHunt(scene, world, boss = null) {
         const solid = mesh.material;
         if (!copies.has(solid)) {
           const fade = solid.clone();
+          // Three.js does not copy custom shader hooks when cloning a material.
+          // Preserve the castle fill throughout spawn/death fades, without a brightness pop.
+          fade.onBeforeCompile = solid.onBeforeCompile;
+          fade.customProgramCacheKey = solid.customProgramCacheKey;
           fade.transparent = true;
           fade.depthWrite = false;
           copies.set(solid, fade);
@@ -386,6 +413,10 @@ export async function loadHunt(scene, world, boss = null) {
         e.fadeBindings.push({ mesh, solid, fade: copies.get(solid) });
       });
     }
+  }
+  function setOpacity(e, alpha) {
+    if (alpha === e.opacity) return;
+    prepareFade(e);
     for (const { mesh, solid, fade } of e.fadeBindings) {
       fade.opacity = solid.opacity * alpha;
       mesh.material = alpha === 1 ? solid : fade;
@@ -414,6 +445,7 @@ export async function loadHunt(scene, world, boss = null) {
   }
   function beginEntry(e, spot, camera, wave, initial = false) {
     navigation.reset(e);
+    e.command.active=false;
     e.mixer.stopAllAction();
     e.root.position.copy(spot);
     e.home.copy(spot);
@@ -430,7 +462,7 @@ export async function loadHunt(scene, world, boss = null) {
     const drop = world.prison
       ? world.dropCeilingY - spot.y - e.height - (0.3 + Math.random() * 0.8)
       : 3.1 + Math.random() * 1.8;
-    const falling = e.actions.jump_down && (initial || Math.random() < 0.75)
+    const falling = !world.castle && e.actions.jump_down && (initial || Math.random() < 0.75)
       && drop > 0 && clearOverhead(spot, world.prison ? drop + e.height : 24);
     const gate = !falling && world.prison ? world.openGate(camera.position) : null;
     e.entry = falling ? 'fall' : gate ? 'gate' : 'fade';
@@ -496,6 +528,7 @@ export async function loadHunt(scene, world, boss = null) {
   }
   function kill(e) {
     if (!e.alive) return;
+    e.command.active=false;
     e.alive = false;
     e.death = 0;
     e.deathFloor = e.groundY;
@@ -608,8 +641,14 @@ export async function loadHunt(scene, world, boss = null) {
           wanderGoal.y=navigation.floorAt(wanderGoal.x,wanderGoal.z,e.home.y);
           goal=wanderGoal;
         }
-        motion=navigation.move(e,goal,dt,e.pace*(e.nav.chasing?1:.55),
-          e.nav.chasing?e.restDistance:.15,enemies);
+        const order=e.command;
+        if(order.active) {
+          order.time-=dt;
+          if(order.time<=0)order.active=false;
+          else goal=order.goal;
+        }
+        motion=navigation.move(e,goal,dt,order.active?order.speed:e.pace*(e.nav.chasing?1:.55),
+          order.active ? .18 : e.nav.chasing?e.restDistance:.15,enemies);
       }
       if(motion==='air'&&e.actions.jump_down) {
         setState(e,'jump_down');
@@ -620,7 +659,7 @@ export async function loadHunt(scene, world, boss = null) {
         setState(e,'stand_up');
         e.actions.stand_up.setEffectiveTimeScale(1);
       } else setState(e,motion==='walk'?'walk':'idle');
-      e.actions.walk.timeScale = e.nav.chasing ? 0.92 : 0.67;
+      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 0.92 : 0.67;
       // The four original species have no authored idle in FishDefine.
       const breath =
         e.state === 'idle' && !e.type.idle ? Math.sin(time * 2.1 + e.phase) * 0.009 : 0;
@@ -729,11 +768,9 @@ export async function loadHunt(scene, world, boss = null) {
         continue;
       hits.length = 0;
       e.root.updateMatrixWorld(true);
-      e.model.traverse((mesh) => {
-        if (!mesh.isMesh) return;
-        if (mesh.isSkinnedMesh) mesh.computeBoundingSphere();
-        mesh.raycast(shotRay, hits);
-      });
+      // Exact posed triangles, without rescanning/skinning every triangle for
+      // each bullet. The BVH and vertex cache are prepared during level loading.
+      e.hitTest(shotRay,hits);
       for (const hit of hits) {
         if (hit.distance >= distance) continue;
         nearest = hit;
@@ -751,5 +788,42 @@ export async function loadHunt(scene, world, boss = null) {
       normal,
     };
   }
-  return { enemies, targets, populate, update, kill, aimPoint, inSight, select, traceShot };
+  function summon(spots,camera) {
+    const spawned=[];
+    for(const spot of spots) {
+      const e=enemies.find(actor=>actor.finished);
+      if(!e)break;
+      const p=homeSpot(spot.x,spot.z,e.height,camera.position,e);
+      if(!p)continue;
+      beginEntry(e,p,camera,1);e.nav.chasing=true;
+      spawned.push(e);
+    }
+    return spawned;
+  }
+  function command(e,goal,duration,speed) {
+    if(!e.alive||e.entry)return false;
+    navigation.reset(e);e.nav.chasing=true;
+    Object.assign(e.command,{active:true,time:duration,speed});
+    e.command.goal.set(goal.x,navigation.floorAt(goal.x,goal.z,e.groundY),goal.z);
+    return true;
+  }
+  function clearCommands(){for(const e of enemies)e.command.active=false;}
+  let warmed=false;
+  async function warmup(renderer,camera) {
+    if(warmed)return;
+    const variants=new T.Group();
+    for(const e of enemies){
+      prepareFade(e);
+      for(const {mesh,solid,fade} of e.fadeBindings)for(const material of [solid,fade]){
+        const proxy=mesh.clone(false);proxy.material=material;variants.add(proxy);
+      }
+    }
+    // compileAsync includes invisible pools. Supply both opaque/fading monster
+    // variants so a respawn, first kill or first explosion cannot compile mid-fight.
+    await renderer.compileAsync(scene,camera);
+    await renderer.compileAsync(variants,camera,scene);
+    await warmRender(renderer,scene,camera);
+    warmed=true;
+  }
+  return { enemies, targets, populate, update, kill, aimPoint, inSight, select, traceShot, summon, command, clearCommands,warmup };
 }

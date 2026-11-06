@@ -14,7 +14,7 @@
   background: #674435;
 }
 .challenge-window {
-  width: min(660px, 94vw);
+  width: min(800px, 94vw);
   max-height: 92dvh;
   overflow: auto;
   padding: 22px;
@@ -31,7 +31,7 @@
 }
 .challenge-roster {
   display: grid;
-  grid-template-columns: 1.8fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-top: 17px;
 }
@@ -66,7 +66,7 @@
   font-size: 38px;
   line-height: 1.4;
 }
-#start-warden {
+#start-warden, #start-bride {
   margin-top: 21px;
   background: #e7b583;
   color: #201e1a;
@@ -75,6 +75,8 @@
   border-radius: 2px;
 }
 .challenge-reserves {
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 1fr;
   display: grid;
   gap: 8px;
 }
@@ -233,7 +235,7 @@
     grid-template-columns: 1fr;
   }
   .challenge-reserves {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
   .challenge-reserves button {
     display: grid;
@@ -257,4 +259,24 @@
   .prison .kills {
     display: none;
   }
+}
+
+#challenge-bride {background:linear-gradient(90deg,#171323ec,#22192b45),url('/castle/briefing.webp') center/cover;background-color:#332a42}
+#start-bride {background:#d6b9e8}
+.castle #boss-health {border-top-color:#c096d8}
+.castle #boss-fill {background:linear-gradient(90deg,#713580,#d595cb)}
+.castle .location {align-items:center}
+.castle .location span {max-width:106px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.castle .location b {white-space:nowrap;font-size:10px}
+.castle #boss-cue {font-size:11px}
+.castle #boss-health > div:first-child {display:grid;grid-template-columns:auto 1fr auto;gap:3px 8px}
+.castle #boss-name {grid-column:1;grid-row:1}
+.castle #boss-percent {grid-column:3;grid-row:1}
+.castle #boss-cue {grid-column:1 / -1;grid-row:2;line-height:1.4;min-height:1.4em}
+@media(max-width:540px) {
+ .challenge-roster {grid-template-columns:1fr}
+ .challenge-card {min-height:158px}
+ .challenge-copy {padding:15px}
+ .challenge-copy strong {font-size:30px}
+ #start-warden,#start-bride {margin-top:10px}
 }

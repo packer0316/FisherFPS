@@ -1,0 +1,46 @@
+
+LA VEUVE / 永夜古堡 · 鬼新娘
+
+Character and combat effects supplied by the project owner:
+- 鬼新娘/Eternal_Bride.c3b, original body and moon base color, normal,
+  metallic, roughness and emission textures.
+- Animation intervals: TMDC_Zombie/ClientCocos/ZombieLua/Define/FishDefine.lua,
+  FishType.EternalBride (27), 30 FPS.
+- Effect anchors, scales and rotations:
+  Define/EfkSettingDefine/FishEternalBrideEfkSetting.lua.
+- Soul flight: View/GameView/Fish/FishEternalBride/FishEternalBrideSoulCollect.lua.
+- Purple dissolve: FishEternalBrideSprite.lua, eternalBrideDissolve.material
+  and shader_3d_zombie_dissolve.frag. Same noise4.png, 3x/2x UV noise,
+  0.1 edge width, RGB (0.6627, 0, 0.9216), 2.333s hold + 4s dissolve.
+- fx/ contains the original Z_037 effects, Z_018_Ghost, Z_18_Sphere_Hit,
+  and their texture, model and material dependencies.
+These owner-provided assets are not covered by the CC0 licenses below.
+bride-victory.png is a transparent portrait rendered from the same owner-provided
+Bride rig and textures for the non-blocking boss payout presentation.
+
+Public-domain environment scans (downloaded 2026-11-06):
+- Marble Bust 01 — Poly Haven
+  https://polyhaven.com/a/marble_bust_01
+- Gothic Statue — Poly Haven
+  https://polyhaven.com/a/gothic_statue
+- License: CC0 1.0
+  https://polyhaven.com/license
+  https://creativecommons.org/publicdomain/zero/1.0/
+1K glTF geometry and textures bundled locally. Runtime material converts
+the scans to aged white plaster with dark tear staining. No network API
+is needed when playing.
+
+Architecture, vault, mouldings, chandeliers, carved scrolls, drapes,
+candles, floral decay, growths, checkerboard marble shader, stained
+glass, dust, mist, combat floor markers and encounter logic:
+created for FisherFPS. Existing plaster/stone/wood maps retain the
+Poly Haven credits in the project README.
+
+Generated local artwork (2026-11-06):
+- ceiling-fresco-v2.png: aged Baroque mourning angels ceiling fresco.
+- mourner-glass-v2.png: aged Gothic leaded glass, veiled mourner and rose tracery.
+Generated with the built-in image_gen tool for this project, not museum reproductions.
+Full generation prompts and usage are recorded in GENERATED-ASSETS.md.
+
+The procedural candle flame/halo shaders, wax glow, character fill lighting,
+damask texture, coffered vault and gilt window tracery were authored for FisherFPS.

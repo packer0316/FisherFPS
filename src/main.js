@@ -1,5 +1,7 @@
 import './style.css';
 import './prison-ui.css';
+import './boss-victory.css';
+import './lobby.css';
 import * as T from 'three';
 import { makeWorld, spawn } from './world.js';
 import { makeViewmodel, startingWeapon, weapons } from './weapons.js';
@@ -7,9 +9,11 @@ import { makeEffects } from './effects.js';
 import { loadCombatParticles } from './combat-particles.js';
 import { loadHunt } from './hunt.js';
 import { loadRewardCoins } from './reward-coins.js';
+import { makeBossPayout } from './boss-payout.js';
 import { loadBossSupplies, makeSupplyEffects } from './boss-supplies.js';
 import { $, gunIcon, makeRadar } from './ui.js';
 import { emit } from './events.js';
+import { makeLookInput, requestRawPointerLock } from './look-input.js';
 
 async function boot() {
   const canvas = $('world'),
@@ -32,6 +36,7 @@ async function boot() {
   const camera = new T.PerspectiveCamera(65, 1, 0.14, 220);
   camera.rotation.order = 'YXZ';
   const player = { x: spawn.x, z: spawn.z, yaw: -0.122, pitch: 0.053 };
+  const lookInput=makeLookInput();
   let world = makeWorld(scene, renderer, coarse);
   let [hunt, particles, view, rewardCoins] = await Promise.all([
     loadHunt(scene, world),
@@ -42,8 +47,10 @@ async function boot() {
   let fx = makeEffects(scene, particles.playBlood),
     radar = makeRadar(world, player);
   const desert={scene,world,hunt,rewardCoins,fx,radar};
-  let prisonLevel, loadingLevel, fieldReturn, bossReturn='ready', loadingChallenge=false;
+  const levels=new Map(), loadingLevels=new Map();
+  let fieldReturn, bossReturn='home', loadingChallenge=false, challengeId='warden';
   let warden=null, supplies=null;
+  let bossVictory=null;
   const supplyEffects=makeSupplyEffects();
   const economy = {
     wallet: 1000,
@@ -58,8 +65,9 @@ async function boot() {
     aim = new T.Vector3(),
     muzzle = new T.Vector3(),
     screen = new T.Vector3();
-  let mode = 'ready',
-    shopReturn = 'ready',
+  let mode = 'home',
+    atHome = true,
+    shopReturn = 'home',
     lock = null,
     clock = 0,
     shotTime = 0,
@@ -134,13 +142,13 @@ async function boot() {
       if (force > tremor * 0.8) {
         const side = dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw);
         tremorSide = Math.abs(side) > 0.1 ? Math.sign(side) : -tremorSide;
-        tremor = force;
+        tremor = Math.min(1.5,Math.max(tremor,force));
         tremorTime = 0;
-        tremorDecay = step ? 11 : attack === 'circle' ? 5.8 : 7.5;
+        tremorDecay = step ? 11 : attack === 'circle' || attack === 'pulse' ? 5.8 : 7.5;
         cameraPose(); // Apply the initial jolt on the same frame as the hit and debris.
       }
     }
-    emit('boss:impact', { species: 'warden', kind, attack, position: at.toArray(), strength });
+    emit('boss:impact', { species: warden?.target.type.id ?? 'warden', kind, attack, position: at.toArray(), strength });
   }
   const shotDirection = new T.Vector3();
   const mag = () => economy.ammo[economy.weapon],
@@ -149,6 +157,7 @@ async function boot() {
     rewardCoins.setWalletTarget($('wallet-anchor').getBoundingClientRect(), canvas.getBoundingClientRect());
   }
   function resize() {
+    lookInput.clear(performance.now());
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -185,6 +194,8 @@ async function boot() {
   }
   function sync() {
     $('wallet').textContent = economy.wallet.toLocaleString('en-US');
+    $('lobby-wallet').textContent=economy.wallet.toLocaleString('en-US');
+    $('lobby-weapon').textContent=weapon().name;
     $('kills').textContent = String(economy.kills).padStart(2, '0');
     $('wave').textContent = String(economy.wave).padStart(2, '0');
     const knife = economy.weapon === 'knife';
@@ -206,6 +217,7 @@ async function boot() {
     $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
   }
   function stopInput() {
+    lookInput.clear(performance.now());
     keys.clear();
     jumpQueued = touchCrouch = false;
     $('crouch-btn').setAttribute('aria-pressed', 'false');
@@ -221,19 +233,25 @@ async function boot() {
     lock = null;
     scanLeft = 0;
     $('app').classList.toggle('playing', next === 'play');
+    atHome=next==='home'||(next==='shop'&&shopReturn==='home')||(next==='challenges'&&bossReturn==='home');
+    $('app').classList.toggle('at-home',atHome);
+    $('app').classList.toggle('paused',next==='pause');
+    $('lobby').hidden=next!=='home';
+    $('pause-home').hidden=next!=='pause';
+    document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     alignWallet();
     $('brief').hidden = next !== 'ready' && next !== 'pause';
     $('shop').hidden = next !== 'shop';
     $('boss-menu').hidden = next !== 'challenges';
-    $('boss-result').hidden = next !== 'result';
+    refreshVictoryOverlay();
     $('session-status').textContent = {
-      ready: '待命中',
+      home:'遊戲大廳', ready: '待命中',
       pause: '已暫停',
       play: '獵殺進行中',
       shop: '軍械整備中',
       challenges: '挑戰選擇', result: '挑戰結束',
     }[next];
-    $('deploy').querySelector('strong').textContent = next === 'pause' ? '繼續獵殺' : '進入獵場';
+    $('deploy').querySelector('strong').textContent = next === 'pause' ? '返回' : '進入獵場';
     $('brief').querySelector('h1').innerHTML =
       next === 'pause' ? '行動暫停<span>.</span>' : '沙境獵場<span>.</span>';
     if (next !== 'play' && document.pointerLockElement === canvas) document.exitPointerLock();
@@ -246,7 +264,7 @@ async function boot() {
     if (!coarse) {
       try {
         if (!canvas.requestPointerLock) throw Error('unsupported');
-        await canvas.requestPointerLock();
+        await requestRawPointerLock(canvas);
         dragFallback = false;
       } catch {
         dragFallback = true;
@@ -257,37 +275,48 @@ async function boot() {
   function pause() {
     if (mode === 'play') {
       setMode('pause');
+      $('deploy').focus();
       emit('hunt:pause');
     }
   }
   function openChallenges() {
-    if (!['ready','pause','play'].includes(mode)) return;
+    if (!['home','ready','pause','play'].includes(mode)) return;
     bossReturn=mode;
     $('leave-prison').hidden=!warden;
-    $('start-warden').textContent=warden?'重新挑戰　→':'進入挑戰　→';
+    for(const id of ['warden','bride'])$('start-'+id).textContent=warden&&challengeId===id?'重新挑戰　→':'進入挑戰　→';
     setMode('challenges');
-    $('challenge-warden').focus();
+    $('challenge-'+challengeId).focus();
   }
   function closeChallenges() {
     if(loadingChallenge)return;
     if(bossReturn==='play') deploy();
     else setMode(bossReturn);
   }
-  async function preparePrison() {
-    if(prisonLevel)return prisonLevel;
-    const [{makePrison},{loadWarden}]=await Promise.all([import('./prison.js'),import('./warden.js')]);
+  async function prepareChallenge(id) {
+    if(levels.has(id))return levels.get(id);
+    const castle=id==='bride';
+    const [mapModule,bossModule]=await Promise.all(castle
+      ? [import('./castle.js'),import('./bride.js')]
+      : [import('./prison.js'),import('./warden.js')]);
     const room=new T.Scene();
-    const arena=makePrison(room,coarse,desert.scene.environment);
+    const arena=await (castle?mapModule.makeCastle:mapModule.makePrison)(room,coarse,desert.scene.environment);
     const [boss,coins,drops]=await Promise.all([
-      loadWarden(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse),
+      (castle?bossModule.loadBride:bossModule.loadWarden)(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse),
       loadBossSupplies(room,arena,grantSupply,particles),
     ]);
     const crowd=await loadHunt(room,arena,boss.target);
-    prisonLevel={scene:room,world:arena,hunt:crowd,rewardCoins:coins,warden:boss,supplies:drops,
+    boss.bindHunt?.(crowd,camera);
+    const level={scene:room,world:arena,hunt:crowd,rewardCoins:coins,warden:boss,supplies:drops,
       fx:makeEffects(room,particles.playBlood,arena.rubble),radar:makeRadar(arena,player)};
-    return prisonLevel;
+    levels.set(id,level);return level;
   }
   function activateLevel(level,pose) {
+    bossVictory=null;
+    $('app').classList.remove('settling');
+    $('boss-result').classList.remove('victory');
+    $('victory-art').hidden=$('victory-score').hidden=true;
+    $('victory-home').hidden=true;
+    $('retry-warden').disabled=$('result-leave').disabled=false;
     supplies?.clear();supplyEffects.clear();
     ({scene,world,hunt,rewardCoins,fx,radar}=level);warden=level.warden??null;
     supplies=level.supplies??null;supplies?.clear();
@@ -303,52 +332,137 @@ async function boot() {
     $('boss-health').hidden=$('player-health').hidden=!warden;
     $('app').classList.remove('hurt');
     $('app').classList.toggle('prison',!!warden);
-    $('radar-panel').querySelector('.location b').textContent=warden?'BLOCK C':'SECTOR 01';
-    $('brief').querySelector('.operation').lastChild.textContent=warden?' BLOCK C':' DUST BAZAAR';
-    $('brief').querySelector('p').textContent=warden?'典獄長會預判跑位。紅線出現後變向，留意重擊後的第二道紅線。':'瞄準獵物開火，擊倒領賞。擊中牆面會退還該發費用。';
-    document.querySelector('header .mode').lastChild.textContent=warden?' 監獄討伐':' 殭屍獵場';
+    $('app').classList.toggle('castle',!!world.castle);
+    $('boss-name').textContent=warden?.target.type.name??'';
+    $('boss-health').setAttribute('aria-label',(warden?.target.type.name??'BOSS')+'血量');
+    $('radar-panel').querySelector('.location b').textContent=world.castle?'LA VEUVE':warden?'BLOCK C':'SECTOR 01';
+    $('brief').querySelector('.operation').lastChild.textContent=world.castle?' LA VEUVE':warden?' BLOCK C':' DUST BAZAAR';
+    $('brief').querySelector('p').textContent=world.castle?'留意詛咒預警：離開紅紫色範圍，穿過空隙。鬼新娘會召喚亡者並驅使衝鋒。':warden?'典獄長會預判跑位。紅線出現後變向，留意重擊後的第二道紅線。':'瞄準獵物開火，擊倒領賞。擊中牆面會退還該發費用。';
+    document.querySelector('header .mode').lastChild.textContent=world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     shadowLeft=0;renderer.shadowMap.needsUpdate=true;cameraPose();alignWallet();
   }
-  async function enterPrison() {
+  async function enterChallenge(id=challengeId) {
     if(loadingChallenge)return;
     loadingChallenge=true;
-    $('challenge-warden').disabled=true;$('start-warden').textContent='載入監獄中…';
+    for(const key of ['warden','bride'])$('challenge-'+key).disabled=true;
+    $('start-'+id).textContent=id==='bride'?'載入古堡中…':'載入監獄中…';
     try {
-      loadingLevel??=preparePrison().catch(error=>{loadingLevel=null;throw error;});
-      const level=await loadingLevel;
+      if(!loadingLevels.has(id))loadingLevels.set(id,prepareChallenge(id).catch(error=>{loadingLevels.delete(id);throw error;}));
+      const level=await loadingLevels.get(id);
       if(!warden)fieldReturn={player:{...player},feet,kills:economy.kills,wave:economy.wave,mode:bossReturn};
-      warden?.stop();
-      activateLevel(level,{player:{x:0,z:16.5,yaw:0,pitch:.12},feet:0});
+      settleBossOnLeave();warden?.stop();fx.clear();rewardCoins.clear();challengeId=id;
+      activateLevel(level,{player:{x:0,z:id==='bride'?20:16.5,yaw:0,pitch:id==='bride' ? .04 : .12},feet:0});
       economy.kills=0;economy.wave=1;fx.clear();rewardCoins.clear();
-      hunt.populate(camera);warden.reset();sync();ui();loadingChallenge=false;
+      hunt.populate(camera);warden.reset();sync();ui();
+      await hunt.warmup(renderer,camera);
+      await view.warmup(renderer);
+      loadingChallenge=false;
       await deploy();
     }catch(error){
-      console.error(error);$('start-warden').textContent='載入失敗，點此重試';
-    }finally{loadingChallenge=false;$('challenge-warden').disabled=false;}
+      console.error(error);$('start-'+id).textContent='載入失敗，點此重試';
+    }finally{loadingChallenge=false;for(const key of ['warden','bride'])$('challenge-'+key).disabled=false;}
   }
-  function leavePrison(){
-    if(!warden||loadingChallenge)return;
-    warden.stop();fx.clear();rewardCoins.clear();
-    const saved=fieldReturn;fieldReturn=null;
-    activateLevel(desert,saved);economy.kills=saved.kills;economy.wave=saved.wave;sync();ui();
-    if(saved.mode==='play')deploy();else setMode(saved.mode);
+  function goHome(){
+    if(loadingChallenge)return;
+    settleBossOnLeave();
+    warden?.stop();fx.clear();rewardCoins.clear();supplies?.clear();supplyEffects.clear();particles.clearWorld();
+    if(warden) {
+      const saved=fieldReturn;fieldReturn=null;
+      activateLevel(desert,saved);economy.kills=saved.kills;economy.wave=saved.wave;
+    }
+    bossVictory=null;
+    $('boss-result').classList.remove('victory');$('victory-home').hidden=true;
+    sync();setMode('home');ui();$('mode-normal').focus();
   }
+  function leavePrison(){goHome();}
   function playerHit(hp){
+    if(bossVictory)return;
     $('health-value').textContent=hp;
     $('app').classList.remove('hurt');void $('app').offsetWidth;$('app').classList.add('hurt');
     if(hp===0)finishChallenge(false);
   }
   function finishChallenge(won){
     if(mode==='result')return;
+    if(won){startBossShower();return;}
     supplies?.clear();supplyEffects.clear();
     warden.stop();
-    $('result-title').textContent=won?'典獄長已擊倒':'挑戰失敗';
-    $('result-detail').textContent=won?'典獄長的 400 賞金已入帳。':'生命已耗盡。再次挑戰將恢復 100 生命。';
+    $('result-title').textContent='挑戰失敗';
+    $('result-detail').textContent='生命已耗盡。再次挑戰將恢復 100 生命。';
     setMode('result');ui();$('retry-warden').focus();
   }
+  function startBossShower() {
+    if(bossVictory?.phase!=='death')return;
+    const target=warden.target,origin=target.root.position.clone();origin.y=target.groundY;
+    warden.stop();hunt.clearCommands?.();
+    const plan=rewardCoins.burstBoss(origin,bossVictory.amount);
+    bossVictory.payout=makeBossPayout(plan.amount,plan.count);
+    bossVictory.phase='scatter';
+    emit('boss:payout',{phase:'scatter',species:target.type.id,amount:plan.amount,coins:plan.count});
+  }
+  function revealBossPrize() {
+    if(bossVictory?.phase!=='scatter')return;
+    const p=bossVictory.payout;p.reveal();rewardCoins.collectBoss();
+    bossVictory.phase='collect';
+    $('boss-result').classList.add('victory');
+    $('victory-art').hidden=$('victory-score').hidden=false;
+    $('result-title').textContent=bossVictory.name+'已擊倒';
+    $('result-detail').textContent='金幣正在飛入賞金餘額…';
+    $('victory-amount').textContent='1';
+    $('victory-progress').style.width='0%';
+    $('victory-home').hidden=true;
+    $('retry-warden').disabled=$('result-leave').disabled=true;
+    refreshVictoryOverlay();
+    emit('boss:payout',{phase:'collect',species:warden.target.type.id,amount:p.amount});
+  }
+  function creditBossCoin(index,value) {
+    if(!bossVictory?.payout)return;
+    const gain=bossVictory.payout.receive(index,value);
+    if(!gain)return;
+    economy.wallet+=gain;sync();
+    emit('wallet:bossCoin',{amount:gain,total:bossVictory.payout.credited});
+  }
+  function updateBossPrize(dt) {
+    const p=bossVictory?.payout;
+    if(!p)return;
+    if(bossVictory.phase==='done') {
+      bossVictory.showLeft-=dt;
+      if(bossVictory.showLeft<=0){
+        bossVictory.phase='complete';$('victory-home').hidden=false;refreshVictoryOverlay();
+      }
+      return;
+    }
+    if(bossVictory.phase!=='collect')return;
+    p.update(dt);
+    $('victory-amount').textContent=p.display.toLocaleString('en-US');
+    $('victory-progress').style.width=(p.collected/p.count*100)+'%';
+    if(p.phase==='done') {
+      $('result-detail').textContent='賞金 '+p.amount.toLocaleString('en-US')+' 已全數入帳';
+      $('retry-warden').disabled=$('result-leave').disabled=false;
+      bossVictory.phase='done';bossVictory.showLeft=3;
+      refreshVictoryOverlay();
+      emit('boss:payout',{phase:'complete',species:warden.target.type.id,amount:p.amount});
+    }
+  }
+  function refreshVictoryOverlay() {
+    const show=!!bossVictory&&['collect','done','complete'].includes(bossVictory.phase)&&mode==='play';
+    $('boss-result').hidden=mode!=='result'&&!show;
+    $('boss-result').querySelector('section').setAttribute('aria-modal',String(mode==='result'));
+    $('app').classList.toggle('settling',show);
+  }
+  function settleBossOnLeave() {
+    if(!bossVictory||bossVictory.flushed)return;
+    // An explicit restart/level change must never discard an already-earned boss prize.
+    const remaining=bossVictory.amount-(bossVictory.payout?.credited??0);
+    if(remaining>0){economy.wallet+=remaining;sync();emit('wallet:bossCoin',{amount:remaining,total:bossVictory.amount});}
+    bossVictory.flushed=true;
+  }
   $('boss-btn').onclick=openChallenges;$('close-boss').onclick=closeChallenges;
-  $('challenge-warden').onclick=$('retry-warden').onclick=enterPrison;
+  for(const id of ['warden','bride'])$('challenge-'+id).onclick=()=>enterChallenge(id);
+  $('retry-warden').onclick=()=>enterChallenge();
   $('leave-prison').onclick=$('result-leave').onclick=leavePrison;
+  $('victory-home').onclick=$('pause-home').onclick=goHome;
+  $('mode-normal').onclick=()=>{if(mode==='home')deploy();};
+  $('mode-boss').onclick=openChallenges;
   $('boss-menu').onclick=e=>{if(e.target===$('boss-menu'))closeChallenges();};
   function equip(id) {
     if (!economy.owned.has(id)) {
@@ -356,6 +470,12 @@ async function boot() {
       return;
     }
     if (economy.weapon === id) return;
+    // Once half of the reload has played, switching away commits the new magazine.
+    // Earlier switches cancel it and keep this weapon's remaining ammunition.
+    if (reloadLeft > 0 && reloadLeft <= reloadDuration * 0.5 + 1e-6) {
+      economy.ammo[economy.weapon] = weapon().mag;
+      emit('weapon:ready', { weapon: economy.weapon });
+    }
     toastLeft = 0;
     triggerHeld = triggerTap = false;
     setScope(false);
@@ -378,9 +498,9 @@ async function boot() {
     } else if (reward.kind === 'mg3') {
       economy.owned.add('mg3');
       economy.ammo.mg3=weapons.mg3.mag;
-      reloadLeft=0;reloadEmpty=false;
       triggerHeld=triggerTap=false;
-      equip('mg3');sync();
+      equip('mg3');
+      reloadLeft=0;reloadEmpty=false;sync();
       notice('取得 MG3 重機槍 · 200 發');
     } else {
       supplyEffects.boost();
@@ -539,6 +659,7 @@ async function boot() {
     if (mode === 'ready' || mode === 'pause') deploy();
   });
   document.addEventListener('pointerlockchange', () => {
+    lookInput.clear(performance.now());
     if (!document.pointerLockElement && mode === 'play' && !coarse && !dragFallback) pause();
   });
   document.addEventListener('visibilitychange', () => {
@@ -572,9 +693,11 @@ async function boot() {
       if (e.code === 'Escape') {
         if (mode === 'challenges') closeChallenges();
         else if (mode === 'shop') closeShop();
+        else if(mode==='pause')deploy();
         else pause();
         return;
       }
+      if(e.code==='Enter'&&mode==='play'&&bossVictory?.phase==='complete'){e.preventDefault();goHome();return;}
       if (e.code === 'Enter' && (mode==='ready'||mode==='pause') && document.activeElement?.tagName !== 'BUTTON')
         deploy();
       if (mode === 'play') {
@@ -590,10 +713,16 @@ async function boot() {
     if (mode === 'play') keys.add(e.code);
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
-  function look(dx, dy, sens) {
-    sens *= T.MathUtils.lerp(1, 0.59, ads);
-    player.yaw -= dx * sens;
-    player.pitch = T.MathUtils.clamp(player.pitch - dy * sens, -1.24, 1.24);
+  function look(dx, dy, sens, eventTime) {
+    const now=performance.now();
+    // Modern DOM timestamps use the performance time origin; handle older hosts.
+    const time=eventTime>1e12?eventTime-performance.timeOrigin:eventTime??now;
+    if(lookInput.add(dx,dy,sens*T.MathUtils.lerp(1,.59,ads),time,now))steering=.2;
+  }
+  function applyLook(now,frameMs) {
+    const input=lookInput.take(now,frameMs),dx=input.rawX,dy=input.rawY;
+    player.yaw -= input.x;
+    player.pitch = T.MathUtils.clamp(player.pitch - input.y, -1.24, 1.24);
     swayX = T.MathUtils.clamp(swayX + dx * 0.0006, -0.055, 0.055);
     swayY = T.MathUtils.clamp(swayY + dy * 0.0004, -0.035, 0.035);
     if (Math.abs(dx) + Math.abs(dy) > 1) steering = 0.2;
@@ -604,7 +733,7 @@ async function boot() {
       mode === 'play' &&
       (document.pointerLockElement === canvas || (dragFallback && e.buttons & 2))
     )
-      look(e.movementX, e.movementY, 0.002);
+      look(e.movementX, e.movementY, 0.002, e.timeStamp);
   });
   function touchPad(id, handler, release) {
     const el = $(id);
@@ -620,7 +749,7 @@ async function boot() {
       handler(e, 0, 0);
     });
     el.addEventListener('pointermove', (e) => {
-      if (pointer !== e.pointerId) return;
+      if (pointer !== e.pointerId || mode !== 'play') return;
       handler(e, e.clientX - lastX, e.clientY - lastY);
       lastX = e.clientX;
       lastY = e.clientY;
@@ -637,7 +766,7 @@ async function boot() {
   }
   touchPad(
     'look-pad',
-    (e, dx, dy) => look(dx, dy, 0.0042),
+    (e, dx, dy) => look(dx, dy, 0.0042, e.timeStamp),
     () => {},
   );
   touchPad(
@@ -663,7 +792,7 @@ async function boot() {
     if(!boss?.alive)return true;
     const p=boss.root.position;
     const range=(x-p.x)**2+(z-p.z)**2;
-    return range>=2.1**2 || range>=(player.x-p.x)**2+(player.z-p.z)**2;
+    return range>=(boss.bodyRadius??2.1)**2 || range>=(player.x-p.x)**2+(player.z-p.z)**2;
   }
   function movement(dt) {
     const crouch = touchCrouch || keys.has('ControlLeft') || keys.has('ControlRight');
@@ -726,7 +855,7 @@ async function boot() {
   }
   let shotOverrun = 0;
   function fire(automatic = false) {
-    if (!view.isReady()) return;
+    if (mode!=='play'||!view.isReady()) return;
     if (economy.weapon === 'knife') {
       if (automatic || shotTime > 0) return;
       shotTime = weapon().delay;
@@ -786,15 +915,19 @@ async function boot() {
       damage: weapon().damage,
     });
     if (e.hp <= 0) {
-      if(e.boss)warden.defeat();
-      else { hunt.kill(e); if (warden) supplies.drop(e); }
-      economy.wallet += e.type.reward;
-      rewardCoins.burst(prizeOrigin, Boolean(e.boss || e.type.smallPrize));
+      if(e.boss) {
+        bossVictory={phase:'death',amount:e.type.reward,name:e.type.name,payout:null};
+        warden.defeat();
+        $('reward').textContent='BOSS 擊倒';rewardLeft=1.1;
+      } else {
+        hunt.kill(e);if(warden)supplies.drop(e);
+        economy.wallet+=e.type.reward;
+        rewardCoins.burst(prizeOrigin,Boolean(e.type.smallPrize));
+        $('reward').textContent='+ '+e.type.reward+' 賞金';rewardLeft=1.1;
+      }
       economy.kills++;
       lock = null;
       scanLeft = 0;
-      $('reward').textContent = '+ ' + e.type.reward + ' 賞金';
-      rewardLeft = 1.1;
       emit('target:kill', {
         species: e.type.id,
         position: e.root.position.toArray(),
@@ -936,9 +1069,10 @@ async function boot() {
   cameraPose();
   hunt.populate(camera);
   sync();
-  setMode('ready');
+  setMode('home');
   ui();
-  await renderer.compileAsync(scene, camera);
+  await hunt.warmup(renderer,camera);
+  await view.warmup(renderer);
   $('loading').hidden = true;
   let shadowLeft = 0;
   function frame(now) {
@@ -950,6 +1084,7 @@ async function boot() {
     updateScope(dt);
     const playing = mode === 'play';
     if (playing) {
+      applyLook(performance.now(),real*1000);
       supplyEffects.update(dt);
       const elapsed = Math.min(0.12, Math.max(0, real));
       const steps = Math.ceil(elapsed * 120);
@@ -962,21 +1097,24 @@ async function boot() {
     }
     if (playing || mode === 'ready') {
       world.breeze.value += dt;
-      if(playing && warden)world.updateGates(dt);
+      if(playing && warden)world.updateGates?.(dt);
       hunt.update(dt, clock, playing, camera, economy.wave, feet);
     }
     if (playing) {
       aimAndFire(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
       if (mag() === 0 && reloadLeft === 0) reload();
-      if(warden)warden.update(dt,player,playerHit,()=>finishChallenge(true));
-      // A fatal boss hit can change mode above; never collect on the result frame.
+      // The boss reward is a separate presentation; normal play and supplies continue.
       if(mode==='play')supplies?.update(dt,player,feet);
     }
+    if(warden&&mode==='play')warden.update(dt,player,playerHit,()=>finishChallenge(true));
     fx.update(playing ? dt : 0);
     if (playing) {
-      rewardCoins.update(dt, particles.playCoinPickup);
+      rewardCoins.update(dt, particles.playCoinPickup, creditBossCoin);
       particles.update(dt);
+      // Update before revealing so the first visible score frame is exactly 1.
+      updateBossPrize(dt);
+      if(rewardCoins.takeBossReveal())revealBossPrize();
     }
     uiLeft -= dt;
     if (uiLeft <= 0) {
@@ -997,6 +1135,8 @@ async function boot() {
       renderer.shadowMap.needsUpdate = true;
       shadowLeft = coarse ? 0.09 : 0.055;
     }
+    // The lobby uses static scene artwork; do not render the full 3D world behind menus.
+    if(atHome)return;
     renderer.clear();
     renderer.render(scene, camera);
     particles.render(camera);
@@ -1018,7 +1158,9 @@ async function boot() {
       readyToScale -= dt;
       if (slow > 1.5 && readyToScale <= 0 && renderer.getPixelRatio() > 0.8) {
         renderer.setPixelRatio(Math.max(0.8, renderer.getPixelRatio() * 0.85));
-        resize();
+        // setPixelRatio already resizes the backing buffer. The CSS size, camera
+        // aspect and HUD have not changed; a second setSize needlessly reallocates it.
+        lookInput.clear(performance.now());
         slow = 0;
         readyToScale = 4;
       }

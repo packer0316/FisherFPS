@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import vertexShader from './shaders/reward-coins/coin.vert?raw';
 import originalFragment from './shaders/reward-coins/unlitCustom.frag?raw';
 import shadowFragment from './shaders/reward-coins/shadow.frag?raw';
+import { makeBossCoinPlan, bossCollectCadence } from './boss-payout.js';
 
 const path = '/effects/reward-coins/';
 const unit = 0.05; // Metres per TMDC board unit, shared by the model and the trajectories.
@@ -64,7 +65,8 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       normalMapStrength: { value: 1 },
     },
   });
-  const capacity = coarse ? 96 : 160;
+  // 150 boss coins plus ordinary in-flight drops, also on mobile.
+  const capacity = world.bossArena ? 256 : coarse ? 96 : 160;
   const coins = batch(scene, 'starcain_low', geometry, material, capacity);
   const opacity = new T.InstancedBufferAttribute(new Float32Array(capacity), 1)
     .setUsage(T.DynamicDrawUsage);
@@ -91,10 +93,12 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
   const pool = Array.from({ length: capacity }, () => ({
     age: 0, x: 0, y: 0, z: 0, floorY: 0, dx: 0, dy: 0, dz: 0, slopeX: 0, slopeZ: 0,
     size: 1, scatter: 0, flyAt: 0, high: 0, low: 0, angle: 0, alpha: 1,
+    boss: false, index: 0, value: 0,
   }));
   const goal = new T.Vector3(), goalLocal = new T.Vector3(), launchLocal = new T.Vector3();
   const walletNdc = new T.Vector2(), pose = new T.Object3D(), projection = new T.Matrix4();
   let active = 0, walletHeight = 0;
+  let bossShower=null;
 
   function setWalletTarget(iconRect, canvasRect) {
     walletHeight = iconRect.height / canvasRect.height;
@@ -105,6 +109,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
   function spawn(origin, dx, dz, big, index, floorY) {
     if (active === capacity) return;
     const s = pool[active++];
+    s.boss=false;s.value=0;
     s.x = origin.x; s.y = origin.y; s.z = origin.z;
     s.floorY = floorY;
     // Stop the fan at cover. Query terrain at spawn time rather than raycasting every frame.
@@ -136,7 +141,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     const bigCoins = prize?.bigCoins ?? (largeKill ? 2 : 0);
     const floorY = prize?.floorY ?? origin.y;
     // Keep a full new boss payout visible even if several bursts overlap on a small pool.
-    if (prize) {
+    if (prize && !bossShower) {
       while (active + smallCoins + bigCoins > capacity) {
         let earliest = 0;
         for (let i = 1; i < active; i++) {
@@ -164,8 +169,39 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     }
   }
 
-  function update(dt, playPickup) {
+  function burstBoss(origin,amount,count) {
+    const plan=makeBossCoinPlan(origin,world,amount,count);
+    // Keep concurrent normal kills visible, reserving space for the entire boss shower.
+    while(active+plan.count>capacity) {
+      let oldest=0;
+      for(let i=1;i<active;i++)if(pool[i].age>pool[oldest].age)oldest=i;
+      const retired=pool[oldest];pool[oldest]=pool[--active];pool[active]=retired;
+    }
+    bossShower={age:0,plan,collecting:false,revealPending:false,remaining:plan.count};
+    for(const p of plan.points) {
+      const s=pool[active++];
+      Object.assign(s,{boss:true,index:p.index,value:p.value,x:origin.x,y:origin.y+.4,z:origin.z,
+        dx:p.x-origin.x,dy:p.y-origin.y-.4,dz:p.z-origin.z,floorY:origin.y,
+        slopeX:0,slopeZ:0,size:p.big?2:1,alpha:1,age:-p.delay,scatter:.9,
+        flyAt:Infinity,high:p.high,low:p.high*.35,angle:random(0,turn)});
+    }
+    return plan;
+  }
+  function collectBoss() {
+    if(!bossShower||bossShower.collecting)return;
+    bossShower.collecting=true;
+    for(let i=0;i<active;i++)if(pool[i].boss)pool[i].flyAt=pool[i].age+pool[i].index*bossCollectCadence;
+  }
+  function takeBossReveal() {
+    if(!bossShower?.revealPending)return false;
+    bossShower.revealPending=false;return true;
+  }
+  function update(dt, playPickup, creditBoss) {
     if (!active) return;
+    if(bossShower&&!bossShower.collecting) {
+      const before=bossShower.age;bossShower.age+=dt;
+      if(before<bossShower.plan.revealAt&&bossShower.age>=bossShower.plan.revealAt)bossShower.revealPending=true;
+    }
     const depth = 0.92;
     const halfHeight = depth * Math.tan(camera.fov * Math.PI / 360);
     goalLocal.set(walletNdc.x * halfHeight * camera.aspect, walletNdc.y * halfHeight, -depth);
@@ -176,6 +212,10 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       s.age += dt;
       if (s.age >= s.flyAt + flyTime) {
         playPickup();
+        if(s.boss) {
+          creditBoss?.(s.index,s.value);
+          if(bossShower&&--bossShower.remaining===0)bossShower=null;
+        }
         pool[i] = pool[--active];
         pool[active] = s;
         continue;
@@ -197,6 +237,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       }
       pose.position.set(lerp(x, goal.x, travel), lerp(y, goal.y, travel), lerp(z, goal.z, travel));
       let size = 0.12 * unit * s.size;
+      if(s.boss)size*=T.MathUtils.smoothstep(s.age,0,.12);
       if (flight > 0) {
         // Guide visible coins across the screen continuously even when the kill was far away.
         launchLocal.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
@@ -238,7 +279,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     submit(fadingCoins, fading);
     if (fading) opacity.needsUpdate = true;
   }
-  function clear() { active=0; for(const mesh of [coins,shadows,fadingCoins])submit(mesh,0); }
-  return { burst, update, setWalletTarget, clear };
+  function clear() { active=0;bossShower=null; for(const mesh of [coins,shadows,fadingCoins])submit(mesh,0); }
+  return { burst, burstBoss, collectBoss, takeBossReveal, update, setWalletTarget, clear };
 }
 

@@ -134,7 +134,7 @@ export async function loadBossSupplies(scene, world, onPickup, particles) {
     slot.mixer.stopAllAction();slot.ring.visible = false;
   }
   function drop(enemy) {
-    if (enemy.boss || !world.prison || Math.random() >= supplyRules.dropChance) return false;
+    if (enemy.boss || !world.bossArena || Math.random() >= supplyRules.dropChance) return false;
     const slot = pool.find(s => s.state === 'free');
     if (!slot) return false;
     const landing = findLanding(enemy.root.position);

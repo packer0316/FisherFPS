@@ -68,7 +68,7 @@
         </div>
         <div id="hitmark">×</div>
         <section id="boss-health" hidden aria-label="典獄長血量">
-          <div><b>典獄長</b><span id="boss-cue"></span><strong id="boss-percent">100%</strong></div>
+          <div><b id="boss-name">典獄長</b><span id="boss-cue"></span><strong id="boss-percent">100%</strong></div>
           <div class="boss-meter"><i id="boss-fill"></i></div>
         </section>
         <div id="reward"></div>
@@ -79,6 +79,7 @@
           <button id="deploy">
             <i data-icon="crosshair"></i><strong>進入獵場</strong><i data-icon="arrow"></i>
           </button>
+          <button id="pause-home" class="challenge-secondary" hidden>回到首頁</button>
         </section>
         <div class="vitals">
           <div id="speed-buff" hidden>
@@ -130,6 +131,28 @@
         </div>
         <span class="mobile-legend">搖桿推到底跑步　右側滑動轉向　先蹲再跳可跳更高</span>
       </footer>
+      <section id="lobby" aria-labelledby="lobby-title" hidden>
+        <div class="lobby-content">
+          <div class="lobby-heading">
+            <div><div class="lobby-eyebrow"><span></span> HUNTER'S LOBBY</div><h1 id="lobby-title">選擇你的獵場<span>.</span></h1><p>整備武器，開始下一場狩獵。</p></div>
+            <div class="lobby-account"><i data-icon="coin"></i><div><small>賞金餘額</small><strong id="lobby-wallet">1,000</strong></div></div>
+          </div>
+          <div class="lobby-modes" aria-label="遊戲模式">
+            <button id="mode-normal" class="lobby-card hunt-card">
+              <img class="lobby-scene" src="/hunt-briefing.webp" alt="" width="960" height="540">
+              <span class="lobby-card-top"><span>01 / HUNT</span><span class="lobby-tag">自由獵殺</span></span>
+              <span class="lobby-card-copy"><small>DUST BAZAAR</small><strong>一般模式</strong><span>穿越沙境街巷，擊倒殭屍，收集賞金。</span><b>進入獵場 <i data-icon="arrow"></i></b></span>
+            </button>
+            <button id="mode-boss" class="lobby-card boss-card">
+              <img class="lobby-scene" src="/prison/briefing.webp" alt="" width="744" height="386">
+              <img class="lobby-bride" src="/castle/bride-victory.png" alt="" width="600" height="760">
+              <span class="lobby-card-top"><span>02 / BOSS</span><span class="lobby-tag">2 場挑戰</span></span>
+              <span class="lobby-card-copy"><small>SPECIAL ENCOUNTERS</small><strong>BOSS 挑戰</strong><span>典獄長、鬼新娘。踏入他們的領地。</span><b>選擇 BOSS <i data-icon="arrow"></i></b></span>
+            </button>
+          </div>
+          <div class="lobby-bottom"><span><i class="live-dot"></i> 準備就緒</span><span>目前裝備 <b id="lobby-weapon">AK-47 突擊步槍</b></span><span>更多模式，敬請期待</span></div>
+        </div>
+      </section>
       <div id="boss-menu" class="overlay" hidden>
         <section class="challenge-window" role="dialog" aria-modal="true" aria-labelledby="challenge-title">
           <div class="shop-head"><h2 id="challenge-title">選擇 BOSS 挑戰</h2>
@@ -138,20 +161,26 @@
             <button id="challenge-warden" class="challenge-card">
               <span class="challenge-copy"><small>C 區監獄中庭</small><strong>典獄長</strong><span id="start-warden">進入挑戰　→</span></span>
             </button>
+            <button id="challenge-bride" class="challenge-card">
+              <span class="challenge-copy"><small>永夜古堡 · 冥婚大廳</small><strong>鬼新娘</strong><span id="start-bride">進入挑戰　→</span></span>
+            </button>
             <div class="challenge-reserves">
-              <button disabled>挑戰 02 <small>尚未開放</small></button>
               <button disabled>挑戰 03 <small>尚未開放</small></button>
               <button disabled>挑戰 04 <small>尚未開放</small></button>
             </div>
           </div>
-          <button id="leave-prison" class="challenge-secondary" hidden>返回沙境獵場</button>
+          <button id="leave-prison" class="challenge-secondary" hidden>回到首頁</button>
         </section>
       </div>
       <div id="boss-result" class="overlay" hidden>
         <section class="challenge-window result-window" role="dialog" aria-modal="true" aria-labelledby="result-title">
-          <h2 id="result-title"></h2><p id="result-detail"></p>
+          <div id="victory-art" hidden><div class="victory-halo"></div><img src="/castle/bride-victory.png" alt="鬼新娘" width="600" height="760"></div>
+          <h2 id="result-title" tabindex="-1"></h2>
+          <div id="victory-score" hidden><span>本次 BOSS 賞金</span><strong id="victory-amount">1</strong><div class="victory-track"><i id="victory-progress"></i></div></div>
+          <p id="result-detail" aria-live="polite"></p>
           <button id="retry-warden" class="challenge-primary">再次挑戰</button>
-          <button id="result-leave" class="challenge-secondary">返回獵場</button>
+          <button id="result-leave" class="challenge-secondary">回到首頁</button>
+          <button id="victory-home" class="challenge-primary" hidden>回到首頁 <kbd>Enter</kbd></button>
         </section>
       </div>
       <div id="shop" class="overlay" hidden>
