@@ -1,0 +1,11 @@
+{
+  "asset": "hunt-title-ink.webp",
+  "created": "2026-11-09",
+  "method": "Built-in image_gen with transparent_background=true; WebP encoding preserves original resolution and alpha.",
+  "text": [
+    "踏入沙境",
+    "獵殺不止"
+  ],
+  "purpose": "Thick traditional brush-calligraphy lobby title. CSS uses the unchanged image alpha to color the upper row warm white (#f1f0e9) and the lower row sandstone gold (#e1b67b), split in the transparent row gap at 51.4%. Accessible text remains in the image alt attribute.",
+  "prompt": "以附圖作為唯一的書法風格參考，重新創作一張真正透明背景的遊戲標題字圖。附圖只參考筆法、字的氣勢與墨韻，不複製附圖的文字、紙張、印章或排版。必須是這八個繁體中文字，分成兩行，每行四字，從左往右：第一行「踏入沙境」，第二行「獵殺不止」。不加標點，不加其他文字。書法方向要接近附圖《三國演義》的厚重毛筆榜書題字：飽滿粗壯的主筆、強烈的提按與側鋒、厚實的頓筆，行筆古拙豪放又瀟灑，自然的彎曲與回鋒，字形大小略有錯落，墨團與留白有節奏。每個字保留自己的骨架，不要變成同一種長尖刺斜體，不要過度橫向拉長，不要現代遊戲的金屬美術字，也不要細線行草。筆畫要比一般行書粗，像大毛筆蘸飽墨一氣寫成，只有少許自然飛白與毛邊；字外只留極少量乾淨的墨點，字與字之間必須乾淨透明，不要鋪一層白霧或碎屑雲。所有字必須正確完整、易辨認，尤其踏、境、獵、殺。上排用低彩度暖灰白 #d2d1c8，下排用幾乎中性的灰米色 #b8af99，適合深灰黑遊戲首頁，啞光單色筆墨，不要鮮黃橘金或紅色邊緣。兩行同樣粗壯有力且大小一致，排成整體約2:1的寬幅構圖，行距足夠讓筆畫不互相遮蓋，四周留5%全透明空間，完整保留筆鋒。必須真的帶alpha透明背景，字內的飛白和字間空隙也要透明。不要紙張、黑色底、白色底、材質底板、印章、邊框、底線、浮雕、描邊、立體、金屬、發光、陰影、水印、英文或UI。Output the actual isolated calligraphy asset, not a mockup."
+}

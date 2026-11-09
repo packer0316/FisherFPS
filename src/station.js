@@ -14,18 +14,19 @@ import { stationEnvironment, stationDetailMap, stationSurface } from './station-
 import { stationLightBudget } from './station-light-budget.js';
 import { makeStationWindowLight, receiveStationWindowLight } from './station-window-light.js';
 import { emit } from './events.js';
+import { getAudio } from './audio.js';
 
 export async function makeStation(scene, coarse, environment) {
   const loader = new GLTFLoader(), textures = new T.TextureLoader();
   const [building, gate, flag, body, normalHead, goldHead, env, wet, doorLight, headLight, warmHeadLight, plaster, plasterNormal, paving, pavingNormal,
     plasterRough,pavingRough,woodMap,woodNormal,woodRough,trainWindow,leatherNormal,leatherRough] = await Promise.all([
-    ...['station-scene','station-door','station-flag','train-body','train-head','train-gold'].map(n=>loader.loadAsync('/station/'+n+'.glb')),
-    ...['environment.png','wet-noise.png','door-light.jpg','head-light.jpg','head-light-warm.jpg'].map(n=>textures.loadAsync('/station/'+n)),
-    textures.loadAsync('/surfaces/plaster-diff.webp'),textures.loadAsync('/surfaces/plaster-nor_gl.webp'),
-    textures.loadAsync('/surfaces/paving-diff.webp'),textures.loadAsync('/surfaces/paving-nor_gl.webp'),
-    ...['plaster-rough','paving-rough','wood-diff','wood-nor_gl','wood-rough'].map(n=>textures.loadAsync('/surfaces/'+n+'.webp')),
-    textures.loadAsync('/station/train-window.jpg'),
-    textures.loadAsync('/station/leather-normal.jpg'),textures.loadAsync('/station/leather-rough.jpg'),
+    ...['station-scene','station-door','station-flag','train-body','train-head','train-gold'].map(n=>loader.loadAsync('station/'+n+'.glb')),
+    ...['environment.png','wet-noise.png','door-light.jpg','head-light.jpg','head-light-warm.jpg'].map(n=>textures.loadAsync('station/'+n)),
+    textures.loadAsync('surfaces/plaster-diff.webp'),textures.loadAsync('surfaces/plaster-nor_gl.webp'),
+    textures.loadAsync('surfaces/paving-diff.webp'),textures.loadAsync('surfaces/paving-nor_gl.webp'),
+    ...['plaster-rough','paving-rough','wood-diff','wood-nor_gl','wood-rough'].map(n=>textures.loadAsync('surfaces/'+n+'.webp')),
+    textures.loadAsync('station/train-window.jpg'),
+    textures.loadAsync('station/leather-normal.jpg'),textures.loadAsync('station/leather-rough.jpg'),
   ]);
   scene.background = new T.Color(0x121b2a); scene.fog = new T.FogExp2(0x18263a,.008);
   scene.environment=stationEnvironment(env);scene.environmentIntensity=.72;
@@ -220,8 +221,10 @@ export async function makeStation(scene, coarse, environment) {
   for(const [angle,length]of [[-.9,.55],[1.4,.85]])clockParts.push(new T.BoxGeometry(.055,length,.025).translate(0,length/2,0).rotateZ(angle));
   const clockMarks=new T.Mesh(mergeGeometries(clockParts),materials.metal);clockParts.forEach(g=>g.dispose());clockMarks.position.copy(clockFace.position);clockMarks.position.z+=.015;scene.add(clockMarks);
 
-  const audio=new Set();let audioAllowed=false;
-  function sound(name,volume=.2){if(!audioAllowed)return;const a=new Audio('/station/audio/'+name+'.mp3');a.volume=volume;audio.add(a);a.onended=()=>audio.delete(a);a.play().catch(()=>audio.delete(a));}
+  // Original station clips share the game's audio engine, buses and mute switch.
+  const audio=getAudio(),stationClip=name=>'station/audio/'+name+'.mp3';let audioAllowed=false;
+  const clipsReady=audio.preload(['SD_in_1','SD_out_1','SD_reward_L_1','SD_reward_M_1','SD_train','Station_train_in','Station_train_out'].map(stationClip));
+  function sound(name,volume=.2){if(audioAllowed)audio.play(stationClip(name),{volume:volume*1.6,tag:'station'});}
   let hunt,camera;
   const steamPool=Array.from({length:48},()=>({age:5,life:2,position:new T.Vector3(),velocity:new T.Vector3()}));let steamCursor=0;
   const steamGeo=new T.BufferGeometry(),steamPosition=new T.Float32BufferAttribute(new Float32Array(48*3),3),steamData=new T.Float32BufferAttribute(new Float32Array(48*2),2);
@@ -316,6 +319,8 @@ export async function makeStation(scene, coarse, environment) {
   for(const m of windowReceivers)receiveStationWindowLight(m);
   for(const side of [-1,1])lightBudget.add(0xbbddff,16,13,scene,new T.Vector3(side*10.5,4.5,-9.8));
   lightBudget.update(.2,new T.Vector3(0,1.62,23));
+  // The arena only counts as loaded once its train and stationmaster clips are decoded.
+  await clipsReady;
   return {station:true,bossArena:true,population:20,basePopulation:0,trainSpawns:true,navigationBounds:{x:stationGround.halfWidth,z:32},dropCeilingY:14,
     autoPlayAllows:stationAutoAllows,autoPlayRecovery:stationAutoRecovery,autoPlayStep:stationAutoStep,autoPlayRoute:stationAutoRoute(terrainHeight),
     spawn:{x:0,z:23,yaw:0,pitch:.03},sun,colliders,zones,terrainHeight,...collision,breeze,trains,boards,
@@ -342,6 +347,6 @@ export async function makeStation(scene, coarse, environment) {
     get playerLocked(){return transit.locked;},get transitKind(){return transit.kind;},get evacuationProgress(){return transit.progress;},
     requestTrain(){for(const train of trains)train.schedule.request();},
     sound,
-    setActive(active){audioAllowed=active;if(!active){for(const a of audio)a.pause();audio.clear();}},
+    setActive(active){audioAllowed=active;if(!active)audio.stopTag('station');},
   };
 }

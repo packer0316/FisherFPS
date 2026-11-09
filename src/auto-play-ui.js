@@ -50,7 +50,7 @@ export function makeAutoPlayUI({onStart,onClose}) {
         const card=document.createElement('button');card.type='button';card.className='auto-monster';card.dataset.species=t.id;card.dataset.name=t.name;
         const rank=document.createElement('span');rank.className='auto-rank';
         const img=document.createElement('img');img.alt='';img.width=256;img.height=256;
-        img.src='/autoplay/'+t.id+'.webp';img.draggable=false;
+        img.src='autoplay/'+t.id+'.webp';img.draggable=false;
         const rule=captureRule(t.id),tag=document.createElement('small');tag.textContent=(rule.tier==='boss'?'BOSS':rule.tier==='medium'?'中怪':'小怪')+' · '+rule.multiplier.toLocaleString('en-US')+' 倍';
         const name=document.createElement('strong');name.textContent=t.name;
         const odds=document.createElement('small');odds.textContent=(bet*rule.multiplier).toLocaleString('en-US')+' 幣 · 擊倒 '+formatChance(rule.killChance);

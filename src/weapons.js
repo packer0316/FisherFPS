@@ -83,9 +83,9 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   root.add(...Object.values(bodies));
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const [pistol, ak, knife, detailMap, knifeArms] = await Promise.all([
-    ...['p226', 'ak47', 'kabar'].map((id) => loader.loadAsync('/viewmodel/' + id + '.glb')),
-    new T.TextureLoader().loadAsync('/viewmodel/ak-finish.webp'),
-    loader.loadAsync('/viewmodel/knife-arms.glb'),
+    ...['p226', 'ak47', 'kabar'].map((id) => loader.loadAsync('viewmodel/' + id + '.glb')),
+    new T.TextureLoader().loadAsync('viewmodel/ak-finish.webp'),
+    loader.loadAsync('viewmodel/knife-arms.glb'),
   ]);
   detailMap.wrapS = detailMap.wrapT = T.RepeatWrapping;
   detailMap.anisotropy = 4;

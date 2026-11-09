@@ -6,7 +6,7 @@ import shadowFragment from './shaders/reward-coins/shadow.frag?raw';
 import { makeBossCoinPlan, bossCollectCadence } from './boss-payout.js';
 import { makeCoinFloor, clearCoinFloor } from './reward-coin-clearance.js';
 
-const path = '/effects/reward-coins/';
+const path = 'effects/reward-coins/';
 const unit = 0.05; // Metres per TMDC board unit, shared by the model and the trajectories.
 const turn = 2 * Math.PI;
 const flyTime = 0.6;

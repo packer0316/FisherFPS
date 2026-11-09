@@ -13,10 +13,12 @@ export function blastDamage(distance) {
 }
 export function makeBallistic(position, velocity, sweep) {
   const p = position.clone(), v = velocity.clone(), next = new T.Vector3(), delta = new T.Vector3();
-  let age = 0, accumulator = 0, resting = false, bounces = 0;
+  let age = 0, accumulator = 0, resting = false, bounces = 0, impact = 0;
   return {
     position: p, velocity: v,
     get age() { return age; }, get resting() { return resting; }, get bounces() { return bounces; },
+    // Strongest normal impact speed since the last call; sliding contacts report almost zero.
+    takeImpact() { const value = impact; impact = 0; return value; },
     update(dt) {
       accumulator += dt;
       while (accumulator + 1e-9 >= stepTime && age + 1e-8 < grenadeStats.fuse) {
@@ -34,6 +36,7 @@ export function makeBallistic(position, velocity, sweep) {
             delta.copy(hit.normal).multiplyScalar(v.dot(hit.normal));
             v.sub(delta).multiplyScalar(.72).add(delta);
             bounces++;
+            impact = Math.max(impact, -normalSpeed);
           }
           if (hit.normal.y > .65 && v.lengthSq() < .65) { v.set(0, 0, 0); resting = true; }
         } else p.copy(next);

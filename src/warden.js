@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { frameClip } from './hunt.js';
 import { makeBossHazards, containsBossHazard, clipBossLane } from './boss-hazards.js';
 import { makeBossImpactEffects } from './boss-impact-effects.js';
+import { emit } from './events.js';
 import officerFragment from './shaders/prison/prisonOfficer.frag?raw';
 
 const frames = {
@@ -74,8 +75,8 @@ function officerMaterial(base, atlas) {
 
 export async function loadWarden(scene, world, particles, groundImpact) {
   const [asset, atlas] = await Promise.all([
-    new GLTFLoader().loadAsync('/monsters/warden.glb'),
-    new T.TextureLoader().loadAsync('/prison/warden-atlas.png'),
+    new GLTFLoader().loadAsync('monsters/warden.glb'),
+    new T.TextureLoader().loadAsync('prison/warden-atlas.png'),
     particles.loadWarden(),
   ]);
   const model = asset.scene,
@@ -218,6 +219,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       steps:Math.max(3,Math.ceil(spec.length/3.2)),kind:'fracture'});
     zone=hazards.mark(zoneIndex++%hazards.pool.length,spec,contactTime-warningStart);
     state = 'warning';
+    emit('boss:attack',{species:'warden',attack:circle?'circle':'line',phase:enraged?2:1,lead:contactTime-warningStart});
     time = 0;
   }
   function startAttack(player) {

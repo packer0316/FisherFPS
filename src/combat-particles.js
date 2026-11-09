@@ -1,12 +1,12 @@
 import { Matrix4, Vector3 } from 'three';
 
-const bloodUrl = '/effects/axe-hit/Bullet_Axe_Hit.efk';
-const pickupUrl = '/effects/reward-coins/pickup/Coin_UP_Get_Flash.efk';
+const bloodUrl = 'effects/axe-hit/Bullet_Axe_Hit.efk';
+const pickupUrl = 'effects/reward-coins/pickup/Coin_UP_Get_Flash.efk';
 
 export async function loadCombatParticles(renderer, walletCanvas) {
   const runtime = window.effekseer;
   await new Promise((resolve, reject) =>
-    runtime.initRuntime('/vendor/effekseer/effekseer.wasm', resolve, reject),
+    runtime.initRuntime('vendor/effekseer/effekseer.wasm', resolve, reject),
   );
   function makeContext(gl, instances, quads) {
     const context = runtime.createContext();
@@ -20,8 +20,8 @@ export async function loadCombatParticles(renderer, walletCanvas) {
         (message, path) => reject(new Error(`${message} (${path})`)),
         (path) => {
           const name = path.slice(path.lastIndexOf('/') + 1);
-          const sharedZombieTexture=!url.startsWith('/effects/grenade/dragon/')&&['zombie_vfx_01.png','vfx_noise_009.png'].includes(name);
-          return sharedZombieTexture ? '/effects/axe-hit/' + name : path;
+          const sharedZombieTexture=!url.startsWith('effects/grenade/dragon/')&&['zombie_vfx_01.png','vfx_noise_009.png'].includes(name);
+          return sharedZombieTexture ? 'effects/axe-hit/' + name : path;
         });
     });
   }
@@ -31,9 +31,9 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   const hud = makeContext(gl, 128, 256);
   const [blood, pickup] = await Promise.all([load(world, bloodUrl, 0.62), load(hud, pickupUrl, 1)]);
   const [grenadeBlast, grenadeSmoke, grenadeDust] = await Promise.all([
-    load(world,'/effects/grenade/dragon/EffekseerMechaJaeger/Explosion.efk',1),
-    load(world,'/effects/grenade/dragon/Effekseer_dt3/Boss_TRex/Bs05_Smoke.efk',1),
-    load(world,'/effects/grenade/dragon/EffekseerMechaJaeger/shock_smoke.efk',1),
+    load(world,'effects/grenade/dragon/EffekseerMechaJaeger/Explosion.efk',1),
+    load(world,'effects/grenade/dragon/Effekseer_dt3/Boss_TRex/Bs05_Smoke.efk',1),
+    load(world,'effects/grenade/dragon/EffekseerMechaJaeger/shock_smoke.efk',1),
   ]);
   renderer.resetState();
   hud.setProjectionOrthographic(17, 17, 0.1, 150);
@@ -92,7 +92,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   const supplySlots = slots(8);
   let supplyAsset, loadingSupply, supplyVisible=false;
   function loadSupply() {
-    loadingSupply ??= load(world,'/supplies/fx/special_vfx.efk',1)
+    loadingSupply ??= load(world,'supplies/fx/special_vfx.efk',1)
       .then(effect=>{supplyAsset=effect;renderer.resetState();})
       .catch(error=>{loadingSupply=null;throw error;});
     return loadingSupply;
@@ -123,7 +123,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   let officerAssets, loadingOfficer, officerVisible = false;
   function loadWarden() {
     loadingOfficer ??= Promise.all(Object.entries(officerEffects).map(async ([key, {file, scale}]) =>
-      [key, await load(world, '/prison/fx/' + file + '.efk', scale)]))
+      [key, await load(world, 'prison/fx/' + file + '.efk', scale)]))
       .then(entries=>{officerAssets=Object.fromEntries(entries);renderer.resetState();})
       .catch(error=>{loadingOfficer=null;throw error;});
     return loadingOfficer;
@@ -179,7 +179,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   let brideAssets,loadingBride,brideVisible=false;
   function loadBride() {
     loadingBride??=Promise.all(Object.entries(brideSpecs).map(async([key,[file]])=>
-      [key,await load(world,'/castle/fx/'+file+'.efk',1)]))
+      [key,await load(world,'castle/fx/'+file+'.efk',1)]))
       .then(entries=>{brideAssets=Object.fromEntries(entries);renderer.resetState();})
       .catch(error=>{loadingBride=null;throw error;});
     return loadingBride;
@@ -203,7 +203,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   let stationAssets,loadingStation,stationVisible=false;
   function loadStation(){
     loadingStation??=Promise.all(Object.entries(stationSpecs).map(async([key,[file]])=>
-      [key,await load(world,'/station/fx/'+file+'.efk',1)]))
+      [key,await load(world,'station/fx/'+file+'.efk',1)]))
       .then(entries=>{stationAssets=Object.fromEntries(entries);renderer.resetState();})
       .catch(error=>{loadingStation=null;throw error;});return loadingStation;
   }
@@ -220,7 +220,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   let bossAssets,loadingBoss,bossVisible=false;
   function loadBossImpacts(){
     loadingBoss??=Promise.all(['ef_fire02','ef_parts_hit01'].map(file=>
-      load(world,'/effects/boss-impacts/'+file+'.efk',1)))
+      load(world,'effects/boss-impacts/'+file+'.efk',1)))
       .then(effects=>{bossAssets=effects;renderer.resetState();})
       .catch(error=>{loadingBoss=null;throw error;});
     return loadingBoss;

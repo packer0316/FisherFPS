@@ -81,7 +81,7 @@ let speciesLibrary;
 function loadSpecies() {
   const loader = new GLTFLoader();
   return Promise.all(types.map(async (type) => {
-    const asset = await loader.loadAsync('/monsters/' + type.id + '.glb');
+    const asset = await loader.loadAsync('monsters/' + type.id + '.glb');
     const take = asset.animations.reduce((a, b) => (a.tracks.length > b.tracks.length ? a : b));
     const clip = (name, range) =>
       frameClip(take, name, range, asset.asset.extras?.frameOffset ?? 1);
@@ -115,7 +115,7 @@ export async function loadHunt(scene, world, boss = null) {
   if (world.prison) {
     // Share geometry, clips and original skins between levels. Only the two uniforms differ.
     await Promise.all(['inmate-man.jpg', 'inmate-woman.jpg'].map(async (name, i) => {
-      const texture = await new T.TextureLoader().loadAsync('/prison/' + name);
+      const texture = await new T.TextureLoader().loadAsync('prison/' + name);
       texture.flipY = false;
       texture.colorSpace = T.SRGBColorSpace;
       assets[i] = clone(assets[i]);
@@ -236,7 +236,8 @@ export async function loadHunt(scene, world, boss = null) {
       maxHp: type.hp,
       alive: true,
       death: 0,
-      pace: 0.99 + (index % 5) * 0.075,
+      // Chase speed in m/s (wandering uses 55%). Walk playback below scales with it.
+      pace: 1.29 + (index % 5) * 0.1,
       home: spot.clone(),
       anchor: spot.clone(),
       height: type.height,
@@ -663,7 +664,7 @@ export async function loadHunt(scene, world, boss = null) {
         setState(e,'stand_up');
         e.actions.stand_up.setEffectiveTimeScale(1);
       } else setState(e,motion==='walk'?'walk':'idle');
-      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 0.92 : 0.67;
+      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 1.2 : 0.87;
       // The four original species have no authored idle in FishDefine.
       const breath =
         e.state === 'idle' && !e.type.idle ? Math.sin(time * 2.1 + e.phase) * 0.009 : 0;

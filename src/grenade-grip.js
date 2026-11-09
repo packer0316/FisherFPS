@@ -90,7 +90,10 @@ export function fitGrenadeGrip(rig) {
   }
   // Oppose the thumb from the radial side, with MCP and IP flexion in one arc.
   // Its metacarpal swings out first, allowing the thumb pad to face the shell.
-  opposeThumb(center.clone().add(v(.023,-.018,.048)));
+  // Let the thumb metacarpal carry the opposition. A contact low on the shell
+  // over-flexed MCP/IP into a hook and stretched the thenar web into a column.
+  // The upper shoulder of the shell permits a broad, shallower closing arc.
+  opposeThumb(center.clone().add(v(.030,.026,.030)));
   const fingers=nodes.map(b=>b.quaternion.clone().normalize());
   const offset=world(center).sub(wrist).applyQuaternion(handQ.clone().invert());
   // Release and empty-hand poses share this palm frame and wrist anchor. Finger

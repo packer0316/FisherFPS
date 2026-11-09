@@ -33,7 +33,7 @@ export async function makeCastle(scene, coarse, environment) {
     const t=texLoader.load(url);t.wrapS=t.wrapT=T.RepeatWrapping;
     t.anisotropy=coarse?2:4;if(color)t.colorSpace=T.SRGBColorSpace;return t;
   }
-  const patina=tex('/prison/weathering.webp',false);
+  const patina=tex('prison/weathering.webp',false);
   const mat=(color,extra={})=>new T.MeshStandardMaterial({color,roughness:.78,...extra});
   const surfaces=makeCastleSurfaces(tex,patina,breeze);
   const {plaster,stone,shadowStone,panel,bronze,gold,iron,wood,velvet,glazing,roseGlass,ceiling}=surfaces;
@@ -60,7 +60,7 @@ export async function makeCastle(scene, coarse, environment) {
       `);
   };
   wax.customProgramCacheKey=()=> 'candle-wax-transmitted-light';
-  const floorNormal=tex('/surfaces/plaster-nor_gl.webp',false);floorNormal.repeat.set(26,34);
+  const floorNormal=tex('surfaces/plaster-nor_gl.webp',false);floorNormal.repeat.set(26,34);
   const floor=new T.MeshPhysicalMaterial({color:0xffffff,roughness:.31,metalness:.07,envMapIntensity:1.2,clearcoat:.36,clearcoatRoughness:.22,normalMap:floorNormal,normalScale:new T.Vector2(.065,.065)});
   floor.onBeforeCompile=s=>{
     s.uniforms.patina={value:patina};
@@ -193,7 +193,7 @@ export async function makeCastle(scene, coarse, environment) {
     const mesh=new T.Mesh(merged,m);mesh.castShadow=m!==ceiling;mesh.receiveShadow=true;mesh.userData.impactKind=kind;
     scene.add(mesh);zones.push(mesh);
   }
-  const statues=await Promise.all(['marble_bust_01','gothic_statue'].map(id=>new GLTFLoader().loadAsync('/castle/statues/'+id+'/'+id+'.gltf')));
+  const statues=await Promise.all(['marble_bust_01','gothic_statue'].map(id=>new GLTFLoader().loadAsync('castle/statues/'+id+'/'+id+'.gltf')));
   statues.forEach((asset,index)=>{
     const base=asset.scene; base.updateMatrixWorld(true);
     const bounds=new T.Box3().setFromObject(base),center=bounds.getCenter(new T.Vector3()),height=index?3.65:2.2;

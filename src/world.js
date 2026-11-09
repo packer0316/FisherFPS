@@ -21,7 +21,7 @@ export function makeWorld(scene, renderer, mobile) {
   const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), mobile ? 2 : 8);
   scene.fog = new T.FogExp2(0xe9ceab, 0.0078);
   scene.background = new T.Color(0x95c7dc);
-  new HDRLoader().load('/surfaces/sky.hdr', (texture) => {
+  new HDRLoader().load('surfaces/sky.hdr', (texture) => {
     texture.mapping = T.EquirectangularReflectionMapping;
     scene.background = scene.environment = texture;
     scene.backgroundIntensity = 0.76;
@@ -53,7 +53,7 @@ export function makeWorld(scene, renderer, mobile) {
       ['nor_gl', 'normalMap'],
       ['rough', 'roughnessMap'],
     ]) {
-      const tex = loader.load('/surfaces/' + name + '-' + suffix + '.webp');
+      const tex = loader.load('surfaces/' + name + '-' + suffix + '.webp');
       tex.wrapS = tex.wrapT = T.RepeatWrapping;
       tex.anisotropy = anisotropy;
       if (property === 'map') tex.colorSpace = T.SRGBColorSpace;
@@ -102,7 +102,7 @@ export function makeWorld(scene, renderer, mobile) {
     stone = surface('stone', 3.1, 0.68),
     paving = surface('paving', 3.0, 0.72);
   const wood = surface('wood', 1.45, 0.67);
-  const sandMap = loader.load('/surfaces/sand-diff.webp');
+  const sandMap = loader.load('surfaces/sand-diff.webp');
   sandMap.colorSpace = T.SRGBColorSpace;
   sandMap.wrapS = sandMap.wrapT = T.RepeatWrapping;
   sandMap.anisotropy = anisotropy;

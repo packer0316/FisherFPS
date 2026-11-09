@@ -2,6 +2,8 @@ import { makeRewardTagState, formatReward, easeOut, REWARD_HOLD, REWARD_EXIT, RE
 import { parseRewardFont, drawRewardNumber } from './reward-font.js';
 
 const kinds = { bronze: '命中小獎', silver: '擊倒賞金', gold: 'BOSS 賞金' };
+// Left edge of the metal frame in bronze/silver/gold.png (columns 98–101 of 2172), as a share of the width.
+const PLATE_INSET = 0.046;
 const portraits = new Set(['walker', 'stalker', 'mummy', 'raider', 'necromancer', 'bride', 'warden', 'stationmaster']);
 async function loadImage(src) {
   const img = new Image(); img.src = src; await img.decode(); return img;
@@ -9,10 +11,10 @@ async function loadImage(src) {
 
 export async function loadRewardTags(parent) {
   const [atlas, description] = await Promise.all([
-    loadImage('/reward-tags/digits.png'),
-    fetch('/reward-tags/digits.fnt').then(r => { if (!r.ok) throw new Error('Reward font failed to load'); return r.text(); }),
-    ...Object.keys(kinds).map(t => loadImage('/reward-tags/' + t + '.png')),
-    ...[...portraits].map(id => loadImage('/autoplay/' + id + '.webp')),
+    loadImage('reward-tags/digits.png'),
+    fetch('reward-tags/digits.fnt').then(r => { if (!r.ok) throw new Error('Reward font failed to load'); return r.text(); }),
+    ...Object.keys(kinds).map(t => loadImage('reward-tags/' + t + '.png')),
+    ...[...portraits].map(id => loadImage('autoplay/' + id + '.webp')),
   ]);
   const font = parseRewardFont(description), state = makeRewardTagState(), cards = new Map();
   const root = document.createElement('div');
@@ -53,9 +55,9 @@ export async function loadRewardTags(parent) {
       el.dataset.species = e.species; el.dataset.tier = e.tier;
       el.setAttribute('aria-label', `${e.name}，${kinds[e.tier]}，${formatReward(e.amount)} 金幣`);
       const art = document.createElement('img'); art.className = 'reward-tag-plate'; art.alt = '';
-      art.src = '/reward-tags/' + e.tier + '.png'; art.draggable = false;
+      art.src = 'reward-tags/' + e.tier + '.png'; art.draggable = false;
       const portrait = document.createElement('img'); portrait.className = 'reward-tag-portrait'; portrait.alt = '';
-      portrait.src = '/autoplay/' + e.species + '.webp'; portrait.draggable = false;
+      portrait.src = 'autoplay/' + e.species + '.webp'; portrait.draggable = false;
       const name = document.createElement('strong'); name.className = 'reward-tag-name'; name.textContent = e.name;
       const kind = document.createElement('span'); kind.className = 'reward-tag-kind'; kind.textContent = kinds[e.tier];
       const number = document.createElement('canvas'); number.className = 'reward-tag-number'; number.setAttribute('aria-hidden', 'true');
@@ -66,7 +68,9 @@ export async function loadRewardTags(parent) {
     update(dt) { state.update(dt); if (cards.size) render(); },
     align(walletRect, viewportWidth, headerBottom = 64) {
       width = Math.max(1, Math.min(360, viewportWidth - walletRect.left - 14));
-      root.style.left = walletRect.left + 'px';
+      // The plate art's metal frame starts ~4.6% in; the ball chain hangs in that margin.
+      // Shift by it so the frame lines up with the wallet panel's left border.
+      root.style.left = Math.max(0, walletRect.left - width * PLATE_INSET) + 'px';
       root.style.bottom = Math.max(0, innerHeight - walletRect.top + 10) + 'px';
       root.style.width = width + 'px';
       root.style.height = Math.max(0, walletRect.top - 10 - headerBottom) + 'px';

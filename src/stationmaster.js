@@ -14,8 +14,8 @@ const maxHp=4200,height=7.2;
 export async function loadStationmaster(scene,world,particles,groundImpact){
   const loader=new T.TextureLoader();
   const [asset,normal,mask,impactFX]=await Promise.all([
-    new GLTFLoader().loadAsync('/station/stationmaster.glb'),loader.loadAsync('/station/station-normal.png'),
-    loader.loadAsync('/station/station-mask.jpg'),makeBossImpactEffects(scene,particles,'warden'),particles.loadStation(),
+    new GLTFLoader().loadAsync('station/stationmaster.glb'),loader.loadAsync('station/station-normal.png'),
+    loader.loadAsync('station/station-mask.jpg'),makeBossImpactEffects(scene,particles,'warden'),particles.loadStation(),
   ]);
   normal.flipY=mask.flipY=false;
   const root=new T.Group(),holder=new T.Group(),model=asset.scene;root.name='站長';root.add(holder);holder.add(model);scene.add(root);

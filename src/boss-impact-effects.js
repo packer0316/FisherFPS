@@ -6,9 +6,9 @@ import * as T from 'three';
 export async function makeBossImpactEffects(scene,particles,theme) {
   const coarse=matchMedia('(pointer: coarse)').matches,violet=theme==='bride';
   const [noise,ring,fire]=await Promise.all([
-    new T.TextureLoader().loadAsync('/effects/boss-impacts/Textures/tx_noise03_256.png'),
-    new T.TextureLoader().loadAsync('/effects/boss-impacts/Textures/tx_shockring01_256.png'),
-    new T.TextureLoader().loadAsync('/effects/boss-impacts/Textures/tx_fire_flipbook01_1024.png'),
+    new T.TextureLoader().loadAsync('effects/boss-impacts/Textures/tx_noise03_256.png'),
+    new T.TextureLoader().loadAsync('effects/boss-impacts/Textures/tx_shockring01_256.png'),
+    new T.TextureLoader().loadAsync('effects/boss-impacts/Textures/tx_fire_flipbook01_1024.png'),
     particles.loadBossImpacts(),
   ]);
   noise.wrapS=noise.wrapT=T.RepeatWrapping;

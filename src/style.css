@@ -35,6 +35,10 @@ body,
   overflow: hidden;
 }
 body {
+  /* Keep the :root text color and font even when a host page resets body styles. */
+  color: inherit;
+  font: inherit;
+  background: var(--ink);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -189,6 +193,13 @@ kbd {
 }
 .icon-button:hover {
   color: white;
+}
+#mute-btn .sound-off,
+#mute-btn[data-muted='true'] .sound-on {
+  display: none;
+}
+#mute-btn[data-muted='true'] .sound-off {
+  display: inline-flex;
 }
 #hud {
   position: absolute;
@@ -382,6 +393,12 @@ h1 span {
   font-size: 12px;
   line-height: 1.75;
   color: #d0d4c9;
+}
+#brief #lock-hint {
+  color: #e5bf88;
+}
+#brief #lock-hint[hidden] {
+  display: none;
 }
 #deploy,
 #grant {
@@ -733,12 +750,65 @@ footer span,
 }
 #loading {
   background: #1b2420;
-  gap: 18px;
+  gap: 24px;
   align-content: center;
   justify-items: center;
   color: var(--amber);
   font-size: 13px;
   letter-spacing: 2px;
+  /* Above every menu, including the BOSS picker it opens over. */
+  z-index: 40;
+}
+.load-panel {
+  display: grid;
+  gap: 9px;
+  width: min(380px, calc(100% - 48px));
+}
+.load-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+#load-msg {
+  min-width: 0;
+  color: #e9e4d6;
+  letter-spacing: 1.5px;
+}
+#load-percent {
+  min-width: 3.2ch;
+  text-align: right;
+  font: italic 24px/1 BarlowC, sans-serif;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.load-bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  background: #0d1411;
+  border: 1px solid #ffb45a33;
+}
+#load-fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: linear-gradient(90deg, #b8692a, var(--amber));
+  box-shadow: 0 0 10px #ffb45a80;
+}
+#load-step {
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+#loading.failed :is(.load-bar, #load-percent, #load-step) {
+  display: none;
+}
+#loading.failed #load-msg {
+  color: #ff9d84;
+  text-align: center;
 }
 @media (pointer: coarse) {
   .combat-btn {

@@ -22,7 +22,7 @@ export function finishGeometry(geometry) {
 export function loadMachineFinishes() {
   const loader = new T.TextureLoader();
   function load(name, repeat) {
-    const texture = loader.load('/viewmodel/mg3-' + name + '.webp');
+    const texture = loader.load('viewmodel/mg3-' + name + '.webp');
     if (repeat) texture.wrapS = texture.wrapT = T.RepeatWrapping;
     texture.anisotropy = 4;
     return texture; // Linear packed masks, including the stencil coverage.

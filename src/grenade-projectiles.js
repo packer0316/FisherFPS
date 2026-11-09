@@ -32,7 +32,7 @@ export function makeGrenadeProjectiles(scene,world,onBlast,onBounce) {
       const item=flying[i],detonate=item.ball.update(dt);
       item.mesh.position.copy(item.ball.position);
       if(!item.ball.resting){item.mesh.rotation.x+=dt*8;item.mesh.rotation.z+=dt*5;}
-      if(item.ball.bounces!==item.bounces){item.bounces=item.ball.bounces;onBounce?.(item.ball.position,item.ball.velocity.length());}
+      if(item.ball.bounces!==item.bounces){item.bounces=item.ball.bounces;onBounce?.(item.ball.position,item.ball.velocity.length(),item.ball.takeImpact());}
       if(detonate){burst(item.ball.position.clone(),item.context);group.remove(item.mesh);flying.splice(i,1);}
     }
     for(let i=flashes.length-1;i>=0;i--){

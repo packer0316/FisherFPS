@@ -19,8 +19,8 @@ export async function loadBride(scene,world,particles,groundImpact) {
   const names=['Eternal_Bride_Normalmap.jpg','Eternal_Bride_Metallic.jpg','Eternal_Bride_Roughness.jpg',
     'Eternal_Bride_emissionmsk.jpg','moon_Normal_OpenGL.jpg','moon_Metallic.jpg','moon_Roughness.jpg','fx/noise4.png'];
   const [asset,maps]=await Promise.all([
-    new GLTFLoader().loadAsync('/monsters/bride.glb'),
-    Promise.all(names.map(n=>loader.loadAsync('/castle/'+n))),
+    new GLTFLoader().loadAsync('monsters/bride.glb'),
+    Promise.all(names.map(n=>loader.loadAsync('castle/'+n))),
     particles.loadBride(),
   ]);
   for(const t of maps){t.flipY=false;t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=4;}

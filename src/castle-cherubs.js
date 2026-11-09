@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // Real DAVID/3DWP sculpture scan, CC BY-SA 4.0. Full attribution and adaptation
 // details travel with the local GLB assets in public/castle/statues/cherub/.
 export async function loadCastleCherubs(scene,zones,coarse) {
-  const asset=await new GLTFLoader().loadAsync('/castle/statues/cherub/cherub'+(coarse?'-mobile':'')+'.glb');
+  const asset=await new GLTFLoader().loadAsync('castle/statues/cherub/cherub'+(coarse?'-mobile':'')+'.glb');
   asset.scene.updateMatrixWorld(true);
   const bounds=new T.Box3().setFromObject(asset.scene),centre=bounds.getCenter(new T.Vector3());
   const height=bounds.max.y-bounds.min.y,placements=[];

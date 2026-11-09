@@ -25,7 +25,7 @@ export function makePrison(scene, coarse, environment) {
   rim.position.set(-19, 7, 12);
   scene.add(rim);
   const loader = new T.TextureLoader();
-  loader.load('/prison/dusk.webp', (sky) => {
+  loader.load('prison/dusk.webp', (sky) => {
     sky.colorSpace = T.SRGBColorSpace;
     sky.mapping = T.EquirectangularReflectionMapping;
     scene.background = sky;
@@ -41,8 +41,8 @@ export function makePrison(scene, coarse, environment) {
   const paint = (color, props = {}) =>
     new T.MeshStandardMaterial({ color, roughness: 0.82, ...props });
   const cement = paint(0x949594, {
-    map: tex('/surfaces/plaster-diff.webp', 2, 1),
-    normalMap: tex('/surfaces/plaster-nor_gl.webp', 2, 1, false),
+    map: tex('surfaces/plaster-diff.webp', 2, 1),
+    normalMap: tex('surfaces/plaster-nor_gl.webp', 2, 1, false),
     normalScale: new T.Vector2(0.4, 0.4),
   });
   const lower = paint(0x516864, {
@@ -50,11 +50,11 @@ export function makePrison(scene, coarse, environment) {
     normalMap: cement.normalMap,
     normalScale: new T.Vector2(0.4, 0.4),
   });
-  const lip = paint(0x778183, { map: tex('/surfaces/stone-diff.webp', 3, 1) });
+  const lip = paint(0x778183, { map: tex('surfaces/stone-diff.webp', 3, 1) });
   const steel = paint(0x434e55, { metalness: 0.55, roughness: 0.48 });
   const rust = paint(0x715541, { metalness: 0.48, roughness: 0.64 });
   const dark = paint(0x202a30, { metalness: 0.35 });
-  const patina = tex('/prison/weathering.webp', 1, 1, false);
+  const patina = tex('prison/weathering.webp', 1, 1, false);
   // The same packed map supplies oxide, pits, water streaks and fractures.
   // Project in metres so plates, round pipes and moving grilles have comparable detail.
   function weather(material, metal) {
@@ -104,9 +104,9 @@ export function makePrison(scene, coarse, environment) {
   for (const mat of [steel, rust, dark]) weather(mat, true);
   for (const mat of [cement, lower, lip]) weather(mat, false);
   const slab = paint(0xa2a6a7, {
-    map: tex('/prison/court.webp'),
-    roughnessMap: tex('/surfaces/paving-rough.webp', 15, 15, false),
-    normalMap: tex('/surfaces/paving-nor_gl.webp', 15, 15, false),
+    map: tex('prison/court.webp'),
+    roughnessMap: tex('surfaces/paving-rough.webp', 15, 15, false),
+    normalMap: tex('surfaces/paving-nor_gl.webp', 15, 15, false),
     normalScale: new T.Vector2(0.18, 0.18),
     roughness: 0.84,
     metalness: 0.08,
@@ -141,9 +141,9 @@ export function makePrison(scene, coarse, environment) {
       '#include <roughnessmap_fragment>\nroughnessFactor = max(0.49, roughnessFactor);',
     );
   };
-  const doorFace = paint(0xc4c0ae, { map: tex('/prison/door.webp') });
-  const upperFace = paint(0xc3cfce, { map: tex('/prison/upper.webp') });
-  const wood = paint(0x93816c, { map: tex('/surfaces/wood-diff.webp', 1, 1) });
+  const doorFace = paint(0xc4c0ae, { map: tex('prison/door.webp') });
+  const upperFace = paint(0xc3cfce, { map: tex('prison/upper.webp') });
+  const wood = paint(0x93816c, { map: tex('surfaces/wood-diff.webp', 1, 1) });
   const lamp = new T.MeshBasicMaterial({ color: 0xffc07b, toneMapped: false });
   const lightGlass = new T.MeshBasicMaterial({ color: 0x87aebf });
   // Backlit wire glass. Bake the dirt, putty and uneven transmission once for all windows.
@@ -376,7 +376,7 @@ export function makePrison(scene, coarse, environment) {
   }
   const roof = paint(0x33434c, { metalness: 0.44 });
   weather(roof, true);
-  const brick = paint(0x79655a, { map: tex('/surfaces/stone-diff.webp', 1, 1) });
+  const brick = paint(0x79655a, { map: tex('surfaces/stone-diff.webp', 1, 1) });
   weather(brick, false);
   const eaves = 24,
     truss = eaves - 3.2;

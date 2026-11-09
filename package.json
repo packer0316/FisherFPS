@@ -8,7 +8,8 @@
     "test:rtp": "node tools/simulate_rtp.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "build:artifact": "vite build && node tools/build_artifact.mjs"
   },
   "dependencies": {
     "three": "0.187.0",

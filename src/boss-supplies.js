@@ -19,7 +19,7 @@ export function rollSupply(random = Math.random) {
 // are shared; only bones, fade materials and mixers are independent per slot.
 export async function loadBossSupplies(scene, world, onPickup, particles) {
   const [asset]=await Promise.all([
-    new GLTFLoader().loadAsync('/supplies/airdrop.glb'),particles.loadSupply(),
+    new GLTFLoader().loadAsync('supplies/airdrop.glb'),particles.loadSupply(),
   ]);
   // FishDefine.lua, 30 fps. Never bind or play the parachute "start" action.
   const clips = Object.fromEntries(Object.entries({
