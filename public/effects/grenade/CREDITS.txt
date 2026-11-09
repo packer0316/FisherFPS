@@ -1,0 +1,22 @@
+Grenade explosion and dust / smoke — supplied DragonTycoon3 assets
+
+dragon/EffekseerMechaJaeger/Explosion.efk: fireball, flying fragments and sparks.
+dragon/EffekseerMechaJaeger/shock_smoke.efk: forceful dust/debris fan.
+dragon/Effekseer_dt3/Boss_TRex/Bs05_Smoke.efk: drifting smoke and embers.
+
+Source requested by the user:
+D:/GIT_TMD/Git_1/DragonTycoon3/ClientCocos/DragonTycoon3Resource
+These are not the public CC0 Effekseer EffectMaterials assets.
+All source effects, texture atlases, materials and model files retain their
+original ownership and licensing; no new license is asserted here.
+
+FisherFPS leaves the EFK definitions unchanged and preserves resource subfolders
+so materials with matching filenames cannot replace each other's textures.
+The fire plume retains its authored +Y up direction at 2x scale. Two upright
+shock_smoke fans are crossed by rotating around world Y (45 and 135 degrees),
+giving outward dust in both ground directions. Smoke rises in world Y, with a
+0.22-second delay, bounded emission and a fade before cleanup at 4.2 seconds.
+Runtime scaling, playback speed and local illumination are game-specific.
+Direction was checked from oblique, side and top views on a 1-metre grid and in
+the castle. Reference effects and 15 dependencies total 207,056 bytes.
+Re-import with tools/import_grenade_effects.py <DragonTycoon3 checkout>.

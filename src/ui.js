@@ -26,7 +26,9 @@ export function icon(name) {
 }
 export function gunIcon(type) {
   const path =
-    type === 'knife'
+    type === 'grenade'
+      ? 'M41 7h15v5h-3l6 8c15 17 5 29-12 29S20 35 32 20l8-8h-3V7zm16 3h7l5 21-4 2-5-18h-3zM31 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'
+      : type === 'knife'
       ? 'M4 36l20-12 3 4 4-3-4-8 4-2 4 5C50 16 68 9 89 7 76 22 59 30 39 32l2 5-4 2-5-8-5 3 1 4-19 10z'
       : type === 'pistol'
         ? 'M8 11h53v4h4v10H38l-4 5h-9l-4 14H10l5-21H8zm17 14-1 4h6l3-4z'

@@ -75,13 +75,14 @@ export function armChain(rig, side, distributeTwist = false) {
     return { bone, home: bone.quaternion.clone() };
   }) : [];
   const twistAxis = v().set(0,1,0);
-  return function place(shoulder, wrist, orientation, stroke, activity = 1, followPalm = 0) {
+  return function place(shoulder, wrist, orientation, stroke, activity = 1, followPalm = 0, elbowHint = null) {
     let palmRoll = 0;
     dir.subVectors(wrist, shoulder);
     const distance = T.MathUtils.clamp(dir.length(), Math.abs(a - b) + 0.001, a + b - 0.001);
     dir.normalize();
     wrist.copy(shoulder).addScaledVector(dir, distance);
-    pole.copy(handForward).applyQuaternion(orientation).multiplyScalar(-b).add(wrist).sub(shoulder);
+    if(elbowHint) pole.copy(elbowHint).sub(shoulder);
+    else pole.copy(handForward).applyQuaternion(orientation).multiplyScalar(-b).add(wrist).sub(shoulder);
     pole.x += side === 'R' ? 0.032 : -0.032;
     pole.y -= 0.026;
     if (activity < 1) pole.lerp(axis.subVectors(elbowBind, shoulder), 1 - activity);

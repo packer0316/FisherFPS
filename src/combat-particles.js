@@ -20,15 +20,21 @@ export async function loadCombatParticles(renderer, walletCanvas) {
         (message, path) => reject(new Error(`${message} (${path})`)),
         (path) => {
           const name = path.slice(path.lastIndexOf('/') + 1);
-          return ['zombie_vfx_01.png', 'vfx_noise_009.png'].includes(name) ? '/effects/axe-hit/' + name : path;
+          const sharedZombieTexture=!url.startsWith('/effects/grenade/dragon/')&&['zombie_vfx_01.png','vfx_noise_009.png'].includes(name);
+          return sharedZombieTexture ? '/effects/axe-hit/' + name : path;
         });
     });
   }
-  const world = makeContext(renderer.getContext(), 768, 1400);
+  const world = makeContext(renderer.getContext(), 2048, 4096);
   // A small transparent HUD surface keeps the actual EFK above the opaque wallet panel.
   const gl = walletCanvas.getContext('webgl2', { alpha: true, antialias: false, premultipliedAlpha: true });
   const hud = makeContext(gl, 128, 256);
   const [blood, pickup] = await Promise.all([load(world, bloodUrl, 0.62), load(hud, pickupUrl, 1)]);
+  const [grenadeBlast, grenadeSmoke, grenadeDust] = await Promise.all([
+    load(world,'/effects/grenade/dragon/EffekseerMechaJaeger/Explosion.efk',1),
+    load(world,'/effects/grenade/dragon/Effekseer_dt3/Boss_TRex/Bs05_Smoke.efk',1),
+    load(world,'/effects/grenade/dragon/EffekseerMechaJaeger/shock_smoke.efk',1),
+  ]);
   renderer.resetState();
   hud.setProjectionOrthographic(17, 17, 0.1, 150);
   hud.setCameraLookAt(0, 0, 60, 0, 0, 0, 0, 1, 0);
@@ -37,6 +43,50 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   // One native arena per render surface and fixed tracking slots for live handles.
   const slots = (count) => Array.from({ length: count }, () => ({ handle: null, age: 0 }));
   const impacts = slots(3), pickups = slots(5);
+  const grenadeSlots=slots(3);
+  let grenadeVisible=false;
+  function clearGrenade(slot){
+    for(const name of ['handle','smoke','dust','dustCross']){slot[name]?.stop();slot[name]=null;}
+    slot.position=null;
+  }
+  function playGrenade(position) {
+    const slot=grenadeSlots.find(s=>!s.position)??grenadeSlots.reduce((a,b)=>a.age>b.age?a:b);
+    clearGrenade(slot);
+    slot.position=position.clone();slot.age=0;slot.smoked=false;slot.emissionStopped=false;
+    slot.handle=world.play(grenadeBlast,position.x,position.y,position.z);
+    slot.handle?.setScale(2.0,2.0,2.0);slot.handle?.setSpeed(1.15);
+    // DragonTycoon3's fire plume is +Y up. shock_smoke is an upright XY fan,
+    // so cross two fans around WORLD Y to fill the XZ ground directions.
+    // Never pitch the plume down or make its emission axis follow the camera.
+    slot.handle?.setRotation(0,0,0);
+    for(const [name,yaw]of [['dust',Math.PI*.25],['dustCross',Math.PI*.75]]){
+      slot[name]=world.play(grenadeDust,position.x,position.y+.05,position.z);
+      slot[name]?.setScale(.48,.34,.48);slot[name]?.setRotation(0,yaw,0);slot[name]?.setSpeed(1.35);
+      slot[name]?.setAllColor(210,195,175,220);
+    }
+    grenadeVisible=true;
+  }
+  function updateGrenades(dt) {
+    grenadeVisible=false;
+    for(const slot of grenadeSlots){
+      if(!slot.position)continue;
+      slot.age+=dt;
+      if(!slot.smoked&&slot.age>=.22){
+        slot.smoked=true;const p=slot.position;
+        slot.smoke=world.play(grenadeSmoke,p.x,p.y+.35,p.z);
+        slot.smoke?.setScale(.36,.48,.36);slot.smoke?.setRotation(0,0,0);slot.smoke?.setSpeed(.85);
+        slot.smoke?.setAllColor(195,185,170,230);
+      }
+      if(!slot.emissionStopped&&slot.age>=1.05){slot.smoke?.stopRoot();slot.emissionStopped=true;}
+      if(slot.age>3.0)slot.smoke?.setAllColor(195,185,170,Math.round(230*Math.max(0,(4.2-slot.age)/1.2)));
+      if(slot.age>4.2)clearGrenade(slot);
+      else grenadeVisible=true;
+    }
+  }
+  function stopGrenades(){
+    for(const slot of grenadeSlots)clearGrenade(slot);
+    grenadeVisible=false;
+  }
   const officerSlots = slots(6);
   // Fixed handles for the eight pooled supply crates; share the existing arena.
   const supplySlots = slots(8);
@@ -236,7 +286,8 @@ export async function loadCombatParticles(renderer, walletCanvas) {
       const slot=supplySlots[i];
       if(slot.anchor)supplyFx(i,slot.anchor,slot.alpha);
     }
-    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible) {
+      updateGrenades(dt);
       if (officerVisible) syncWardenEffects();
       if(brideVisible)for(const slot of brideSlots)if(slot.handle&&slot.anchor) {
         slot.anchor.updateWorldMatrix(true,false);slot.handle.setMatrix(slot.anchor.matrixWorld.elements);
@@ -253,7 +304,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     }
   }
   function render(camera) {
-    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible) {
       world.setProjectionMatrix(camera.projectionMatrix.elements);
       world.setCameraMatrix(camera.matrixWorldInverse.elements);
       world.draw();
@@ -270,13 +321,14 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     stopWarden();
     stopBride();
     stopBossImpacts();
+    stopGrenades();
     for(let i=0;i<supplySlots.length;i++)supplyFx(i,null);
     supplyVisible=false;
     for(const pool of [impacts,pickups])for(const s of pool){s.handle?.stop();s.handle=null;}
     bloodVisible=pickupVisible=false;clearPickup=true;cooldown=0;
     world.update(1);hud.update(1);
   }
-  return { playBlood, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx,
+  return { playBlood, playGrenade, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx,
     loadBride,brideFx,stopBride,loadBossImpacts,bossImpact,stopBossImpacts };
 }
 

@@ -30,6 +30,14 @@ Public-domain environment scans (downloaded 2026-11-06):
 the scans to aged white plaster with dark tear staining. No network API
 is needed when playing.
 
+Licensed wall sculpture scan (downloaded 2026-11-09):
+- Angel Sculpture (Statue 3D Scan), DAVID LaserScanner / 3DWP.
+  https://www.thingiverse.com/thing:488220
+- CC BY-SA 4.0; adapted mesh and baked normal map retain the same license.
+- Full attribution, source mirror, and adaptation details:
+  statues/cherub/CREDITS.txt
+This sculpture replaces the procedural wings and combined bust/wing reliefs.
+
 Architecture, vault, mouldings, chandeliers, carved scrolls, drapes,
 candles, floral decay, growths, checkerboard marble shader, stained
 glass, dust, mist, combat floor markers and encounter logic:

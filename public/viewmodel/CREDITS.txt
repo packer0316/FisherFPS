@@ -29,3 +29,34 @@ rebuild the left side without the upstream gun-contact dents. Joint lengths,
 UVs and texture attribution are retained. Wrist volume corrections are baked
 into this dedicated mesh; the original firearm assets are unchanged.
 
+G5 grenade: original fictional external prop geometry and animation by FisherFPS.
+Uses the same credited knife-arms.glb mesh, skin weights, joint lengths and
+forearm twist correctives. No additional third-party hand mesh is introduced.
+
+Pose references consulted 2026-11-09 (reference only; images are not bundled):
+- AO Surgery Reference, Hand flexor tendon mechanism: coordinated MCP/PIP/DIP
+  flexion, separate thumb opposition and the hand's flexor tendon paths.
+  https://surgeryreference.aofoundation.org/orthopedic-trauma/adult-trauma/further-reading/hand-flexor-tendon-mechanism
+- U.S. Army / DVIDS, Hand Grenade Basics, photograph by 2LT Ellington Ward,
+  2023-08-14: shoulder-side preparation, bent throwing elbow, wrist/hand grip.
+  https://www.dvidshub.net/image/7971959/hand-grenade-basics
+- U.S. Army, 2-1 STB soldiers demonstrate proficiency at grenade range,
+  2012-09-26: stance and upper-limb movement photo reference.
+  https://www.army.mil/article/87970/2_1_STB_soldiers_demonstrate_proficiency_at_grenade_range/
+- A quantitative taxonomy of human hand grasps (2019): spherical grasp and
+  variation in joint flexion across fingers. Four separate knuckle planes and
+  an opposing thumb are fitted to the fictional prop's surface.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC6377750/
+- AAOS, Kinesiology and Functional Characteristics of the Upper Limb:
+  palm support, finger flexion and thumb opposition in spherical grasp.
+  https://www.oandplibrary.org/alp/chap05-01.asp
+- Close-up visual references: a spherical object cradled against the palm,
+  four finger pads around one side, thumb opposing from the other.
+  https://genk.vn/luu-dan-hoat-dong-nhu-the-nao-20131127232840085.chn
+  https://shop.parkinsons.org.uk/products/therapy-gel-balls-green-medium
+- Van den Tillaar & Ettema (2004), A Force-Velocity Relationship and
+  Coordination Patterns in Overarm Throwing: upper-arm, elbow and wrist
+  coordination. Used to author overlapping arm acceleration, delayed wrist
+  flexion and hand follow-through; this is game animation, not motion capture.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC3938059/
+

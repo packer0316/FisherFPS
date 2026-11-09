@@ -15,6 +15,9 @@ import { $, gunIcon, makeRadar } from './ui.js';
 import { emit } from './events.js';
 import { makeLookInput, requestRawPointerLock } from './look-input.js';
 import { makeDamageFeedback } from './damage-feedback.js';
+import { makeGrenadeState } from './grenade-state.js';
+import { grenadeStats, throwVelocity, blastDamage } from './grenade-physics.js';
+import { makeGrenadeProjectiles } from './grenade-projectiles.js';
 
 async function boot() {
   const canvas = $('world'),
@@ -59,10 +62,13 @@ async function boot() {
     bet: 10,
     kills: 0,
     wave: 1,
-    owned: new Set([startingWeapon, 'pistol', 'knife']),
+    owned: new Set([startingWeapon, 'pistol', 'knife', 'grenade']),
     weapon: startingWeapon,
-    ammo: Object.fromEntries(Object.entries(weapons).filter(([, w]) => w.mag).map(([id, w]) => [id, w.mag])),
+    ammo: { grenade: grenadeStats.supply, ...Object.fromEntries(Object.entries(weapons).filter(([, w]) => w.mag).map(([id, w]) => [id, w.mag])) },
   };
+  const grenade = makeGrenadeState(throwGrenade);
+  let grenades = makeGrenadeProjectiles(scene,world,explodeGrenade,grenadeBounce);
+  const playerVelocity = new T.Vector3(), previousPlayer = new T.Vector3();
   const keys = new Set(),
     stick = { x: 0, y: 0 },
     aim = new T.Vector3(),
@@ -180,7 +186,7 @@ async function boot() {
       player.z,
     );
     camera.rotation.set(player.pitch + kickPitch, player.yaw + kickYaw, 0, 'YXZ');
-    if (warden && tremor > 0.003 && !reducedMotion.matches) {
+    if (tremor > 0.003 && !reducedMotion.matches) {
       const t = tremorTime;
       const force = tremor * (1 - 0.44 * ads);
       camera.position.y += force * (0.092 * Math.cos(33 * t) + 0.027 * Math.cos(56 * t));
@@ -204,16 +210,17 @@ async function boot() {
     $('bet-plus').disabled = economy.bet >= 1000;
     $('kills').textContent = String(economy.kills).padStart(2, '0');
     $('wave').textContent = String(economy.wave).padStart(2, '0');
-    const knife = economy.weapon === 'knife';
+    const knife = economy.weapon === 'knife', throwable = economy.weapon === 'grenade', manual = knife || throwable;
     $('ammo').textContent = knife ? '近戰' : String(mag()).padStart(2, '0');
-    $('capacity').parentElement.hidden = knife;
+    $('capacity').parentElement.hidden = manual;
     $('capacity').textContent = weapon().mag ?? '';
-    $('reload-btn').hidden = knife;
-    $('auto-btn').disabled = knife;
-    $('auto-btn').setAttribute('aria-pressed', String(!knife && autoFire));
-    $('auto-label').textContent = knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
+    $('reload-btn').hidden = manual;
+    $('auto-btn').disabled = manual;
+    $('auto-btn').setAttribute('aria-pressed', String(!manual && autoFire));
+    $('auto-label').textContent = throwable ? '按住蓄力 · 放開投擲' : knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
+    $('fire-btn').setAttribute('aria-label',throwable?'按住拔銷蓄力，放開投擲':'射擊');
     $('weapon-name').textContent = weapon().name;
-    $('cost').textContent = knife ? '近戰距離 2.5 公尺' : economy.bet + ' 幣 / 發';
+    $('cost').textContent = throwable ? '配發 5 顆 · 不扣金幣' : knife ? '近戰距離 2.5 公尺' : economy.bet + ' 幣 / 發';
     $('scope-btn').hidden = !weapon().aimFov;
     const weaponIcon = $('weapon-icon');
     if (weaponIcon.dataset.weapon !== economy.weapon) {
@@ -228,6 +235,7 @@ async function boot() {
     jumpQueued = touchCrouch = false;
     $('crouch-btn').setAttribute('aria-pressed', 'false');
     triggerHeld = triggerTap = false;
+    grenade.cancel();
     stick.x = stick.y = 0;
     $('stick').firstElementChild.style.transform = '';
     moving = 0;
@@ -318,6 +326,7 @@ async function boot() {
     levels.set(id,level);return level;
   }
   function activateLevel(level,pose) {
+    grenades.dispose();
     bossVictory=null;
     $('app').classList.remove('settling');
     $('boss-result').classList.remove('victory');
@@ -326,6 +335,7 @@ async function boot() {
     $('retry-warden').disabled=$('result-leave').disabled=false;
     supplies?.clear();supplyEffects.clear();
     ({scene,world,hunt,rewardCoins,fx,radar}=level);warden=level.warden??null;
+    grenades=makeGrenadeProjectiles(scene,world,explodeGrenade,grenadeBounce);
     supplies=level.supplies??null;supplies?.clear();
     Object.assign(player,pose.player);feet=pose.feet;
     grounded=true;verticalSpeed=stepOffset=landingTime=landingDip=0;
@@ -477,6 +487,7 @@ async function boot() {
       return;
     }
     if (economy.weapon === id) return;
+    grenade.cancel();
     // Once half of the reload has played, switching away commits the new magazine.
     // Earlier switches cancel it and keep this weapon's remaining ammunition.
     if (reloadLeft > 0 && reloadLeft <= reloadDuration * 0.5 + 1e-6) {
@@ -536,11 +547,11 @@ async function boot() {
           '</h3><small>' +
           w.family +
           (id === startingWeapon ? ' · 初始配發' : '') +
-          (id === 'knife' ? ' · 配發' : ' · ' + w.mag + (id === 'mg3' ? ' 發彈箱' : ' 發彈匣')) +
+          (id === 'grenade' ? ' · 剩餘 ' + economy.ammo.grenade + ' / 5 顆' : id === 'knife' ? ' · 配發' : ' · ' + w.mag + (id === 'mg3' ? ' 發彈箱' : ' 發彈匣')) +
           '</small><span class="spec">' +
           w.damage +
           ' 傷害　/　' +
-          (id === 'knife' ? '近戰 2.5 公尺' : economy.bet + ' 幣每發') +
+          (id === 'grenade' ? '範圍爆炸 · 不扣金幣' : id === 'knife' ? '近戰 2.5 公尺' : economy.bet + ' 幣每發') +
           '</span></div><button data-buy="' +
           id +
           '" ' +
@@ -615,7 +626,7 @@ async function boot() {
     }
   };
   function reload() {
-    if (mode !== 'play' || economy.weapon === 'knife' || reloadLeft > 0 || !view.isReady()) return;
+    if (mode !== 'play' || !weapon().mag || reloadLeft > 0 || !view.isReady()) return;
     setScope(false);
     reloadEmpty = mag() === 0;
     reloadDuration = weapon().reload * (reloadEmpty ? 1 : 0.86);
@@ -623,7 +634,7 @@ async function boot() {
     emit('weapon:reload', { weapon: economy.weapon });
   }
   function toggleAuto() {
-    if (economy.weapon === 'knife') return;
+    if (!weapon().mag) return;
     autoFire = !autoFire;
     lock = null;
     scanLeft = 0;
@@ -636,11 +647,18 @@ async function boot() {
   }
   function pressTrigger() {
     if (mode !== 'play') return;
+    if (economy.weapon === 'grenade') {
+      if (!view.isReady()) return;
+      if (!mag()) { notice('手榴彈已用完'); return; }
+      if (grenade.press(mag())) emit('weapon:prime',{weapon:'grenade'});
+      return;
+    }
     triggerHeld = true;
     triggerTap = true;
   }
   function releaseTrigger() {
     triggerHeld = false;
+    grenade.release();
   }
   $('auto-btn').onclick = toggleAuto;
   $('scope-btn').onclick = toggleScope;
@@ -655,6 +673,7 @@ async function boot() {
     pressTrigger();
   });
   $('fire-btn').addEventListener('lostpointercapture', releaseTrigger);
+  $('fire-btn').addEventListener('pointercancel',()=>{grenade.cancel();triggerHeld=triggerTap=false;});
   document.addEventListener('mousedown', (e) => {
     if (
       e.button === 2 &&
@@ -702,6 +721,7 @@ async function boot() {
         'Digit2',
         'Digit3',
         'Digit4',
+        'Digit5',
         'Escape',
         'Space',
         'ControlLeft',
@@ -729,7 +749,8 @@ async function boot() {
         if (e.code === 'Digit1') equip('rifle');
         if (e.code === 'Digit2') equip('pistol');
         if (e.code === 'Digit3') equip('knife');
-        if (e.code === 'Digit4') equip('mg3');
+        if (e.code === 'Digit4') equip('grenade');
+        if (e.code === 'Digit5') equip('mg3');
       }
     }
     if (mode === 'play') keys.add(e.code);
@@ -876,8 +897,50 @@ async function boot() {
     } else feet = next;
   }
   let shotOverrun = 0;
+  function throwGrenade(power) {
+    if(mode!=='play'||economy.weapon!=='grenade'||economy.ammo.grenade<=0)return;
+    camera.getWorldDirection(shotDirection);
+    // A swept path from the eye prevents throwing through an adjacent wall.
+    const desired=view.grenadeOrigin(camera,new T.Vector3());
+    const contact=grenades.sweep(camera.position,desired,grenadeStats.radius);
+    const origin=contact?contact.position.clone().addScaledVector(contact.normal,.002):desired;
+    const velocity=throwVelocity(shotDirection,power,playerVelocity);
+    if(contact&&velocity.dot(contact.normal)<0)velocity.reflect(contact.normal).multiplyScalar(.4);
+    grenades.launch(origin,velocity);economy.ammo.grenade--;
+    emit('weapon:throw',{weapon:'grenade',origin:origin.toArray(),velocity:velocity.toArray(),power,remaining:economy.ammo.grenade,cost:0});
+    sync();
+  }
+  function grenadeBounce(position,speed) {
+    emit('grenade:bounce',{position:position.toArray(),speed});
+  }
+  function explodeGrenade(position) {
+    particles.playGrenade(position);
+    let hits=0;
+    for(const enemy of hunt.targets){
+      if(!enemy.alive)continue;
+      const target=enemy.root.position.clone();target.y+=enemy.height*.45;
+      const distance=Math.max(0,position.distanceTo(target)-(enemy.boss?1.3:.35));
+      const damage=blastDamage(distance);
+      if(!damage||!grenades.visible(position,target))continue;
+      particles.playBlood(target,target.clone().sub(position).normalize(),enemy);
+      damageEnemy(enemy,target,damage);hits++;
+    }
+    if(!reducedMotion.matches){
+      const distance=position.distanceTo(camera.position);
+      const force=1.9*Math.pow(Math.max(0,1-distance/30),1.25);
+      if(force>tremor*.8){
+        const side=(player.x-position.x)*Math.cos(player.yaw)-(player.z-position.z)*Math.sin(player.yaw);
+        tremorSide=Math.abs(side)>.1?Math.sign(side):-tremorSide;
+        tremor=Math.max(tremor,force);tremorTime=0;tremorDecay=5.2;
+        cameraPose(); // The initial jolt coincides with the visible detonation.
+      }
+    }
+    emit('grenade:explode',{position:position.toArray(),radius:grenadeStats.blastRadius,hits});
+    sync();
+  }
   function fire(automatic = false) {
     if (mode!=='play'||!view.isReady()) return;
+    if (economy.weapon === 'grenade') return;
     if (economy.weapon === 'knife') {
       if (automatic || shotTime > 0) return;
       shotTime = weapon().delay;
@@ -928,17 +991,17 @@ async function boot() {
     if (economy.wallet < economy.bet) notice('賞金不足，可回大廳調低 BET 或按 B 開啟商店整備');
   }
   const prizeOrigin = new T.Vector3();
-  function damageEnemy(e, position) {
+  function damageEnemy(e, position, damage = weapon().damage) {
     if (!e.alive) return;
     flashLeft = 0.13;
-    e.hp -= weapon().damage;
+    e.hp -= damage;
     prizeOrigin.set(e.root.position.x, e.groundY, e.root.position.z);
     if(e.boss)warden.hit();
     else e.root.rotation.z = (Math.random() > 0.5 ? 1 : -1) * 0.11;
     emit('target:hit', {
       species: e.type.id,
       position: position.toArray(),
-      damage: weapon().damage,
+      damage,
     });
     if (e.hp <= 0) {
       if(e.boss) {
@@ -993,6 +1056,10 @@ async function boot() {
     shotTime -= dt;
     scanLeft -= dt;
     steering -= dt;
+    if (economy.weapon === 'grenade') {
+      grenade.update(dt); lock=null; triggerHeld=triggerTap=false;
+      return;
+    }
     if (reloadLeft > 0) {
       reloadLeft -= dt;
       if (reloadLeft <= 0) {
@@ -1069,7 +1136,11 @@ async function boot() {
       tick.style.left = width / 2 + ((d - bearing) * width) / 126 + 'px';
     });
     $('aim-status').textContent =
-      economy.weapon === 'knife'
+      economy.weapon === 'grenade'
+        ? !mag() ? '手榴彈已用完' : grenade.phase === 'pin' ? '拔插銷中'
+          : grenade.phase === 'held' ? '蓄力 '+Math.round(grenade.power*100)+'% · 放開投擲'
+          : grenade.phase === 'throw' || grenade.phase === 'recover' ? '投擲中' : '點按投擲 · 按住蓄力'
+        : economy.weapon === 'knife'
         ? '近戰'
         : reloadLeft
           ? '換彈中'
@@ -1116,10 +1187,12 @@ async function boot() {
       applyLook(performance.now(),real*1000);
     }
     if (simulating) {
+      previousPlayer.set(player.x,feet,player.z);
       supplyEffects.update(dt);
       const movementTime = Math.min(0.12, elapsed);
       const steps = Math.ceil(movementTime * 120);
       for (let i = 0; i < steps; i++) movement(movementTime / steps);
+      playerVelocity.set(player.x,feet,player.z).sub(previousPlayer).divideScalar(movementTime);
       kickPitch *= Math.exp(-dt * 12);
       kickYaw *= Math.exp(-dt * 14);
       tremor *= Math.exp(-dt * tremorDecay);
@@ -1133,6 +1206,7 @@ async function boot() {
     }
     if (simulating) {
       aimAndFire(dt);
+      grenades.update(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
       if (mag() === 0 && reloadLeft === 0) reload();
       // The boss reward is a separate presentation; normal play and supplies continue.
@@ -1178,11 +1252,12 @@ async function boot() {
       reloadLeft > 0 ? 1 - reloadLeft / reloadDuration : 0,
       reloadEmpty,
       ads,
-      swayX,
-      swayY,
+      swayX+(reducedMotion.matches?0:tremor*tremorSide*.065*Math.cos(26*tremorTime)),
+      swayY+(reducedMotion.matches?0:tremor*.05*Math.cos(33*tremorTime)),
       walkPhase,
       grounded,
       mag(),
+      grenade,
     );
     if (playing) {
       slow = real > 0.032 ? slow + uiDt : Math.max(0, slow - uiDt * 0.7);

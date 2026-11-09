@@ -1,0 +1,23 @@
+Angel Sculpture (Statue 3D Scan)
+Original scan: DAVID LaserScanner demonstration sculpture.
+Preparation, flat base and publication: 3DWP.
+Source: https://www.thingiverse.com/thing:488220
+Author: https://www.3dwp.nl
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Original archive retrieved 2026-11-09 from the attribution-preserving mirror:
+https://atelierfigurines3d.com/api/free-library?id=tv-488220
+License and creator independently verified against the original Thingiverse
+page's public CreativeWork metadata on 2026-11-09.
+
+FisherFPS adaptations, also licensed CC BY-SA 4.0:
+- Normalize the source mesh to a one-metre height.
+- Reduce the 613,490 valid source triangles to 45,000 desktop / 22,000 mobile.
+- Bake original sculpted details into a 2048px tangent-space normal map.
+- Export local GLB assets with ivory stone material and embedded normal map.
+- Runtime rotates and compresses depth for wall-mounted high reliefs.
+
+Files covered: cherub.glb, cherub-mobile.glb, cherub-normal.png.
+The license applies to these adapted assets, not unrelated game code/assets.
+Reproduction tool: tools/prepare_castle_cherub.py.

@@ -4,6 +4,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { installMachineGun } from './machine-gun.js';
 import { installKnife, knifeContactTime } from './knife.js';
+import { installGrenade } from './grenade-viewmodel.js';
+import { grenadeStats } from './grenade-physics.js';
 import { installWeapon } from './weapon-rig.js';
 import { muzzleFlash } from './muzzle-flash.js';
 import { getSmokeTexture } from './effects.js';
@@ -11,6 +13,10 @@ import { warmRender } from './render-warmup.js';
 
 export const startingWeapon = 'rifle';
 export const weapons = {
+  grenade: {
+    name: 'G5 手榴彈', code: 'G5', family: '投擲武器',
+    damage: grenadeStats.damage, cost: 0, price: 0,
+  },
   pistol: {
     name: 'P12 戰術手槍',
     code: 'P12',
@@ -73,7 +79,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   key.position.copy(fillDirection);
   rim.position.set(2, 1, -2);
   scene.add(key, rim, new T.HemisphereLight(0xe2edfc, 0x916e4f, 1.12));
-  const bodies = { pistol: new T.Group(), rifle: new T.Group(), knife: new T.Group(), mg3: new T.Group() };
+  const bodies = { pistol: new T.Group(), rifle: new T.Group(), knife: new T.Group(), mg3: new T.Group(), grenade: new T.Group() };
   root.add(...Object.values(bodies));
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const [pistol, ak, knife, detailMap, knifeArms] = await Promise.all([
@@ -86,6 +92,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   // The two long guns share the glove geometry and textures, but pose independent bones.
   const machineArms = clone(ak.scene.getObjectByName('FPRig'));
   const rigs = {
+    grenade: installGrenade(bodies.grenade, knifeArms, ak.scene.getObjectByName('FPArms').material, detailMap),
     knife: installKnife(bodies.knife, knifeArms, knife, detailMap, ak.scene.getObjectByName('FPArms').material),
     pistol: installWeapon(bodies.pistol, pistol, false),
     rifle: installWeapon(bodies.rifle, ak, true, detailMap),
@@ -159,6 +166,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   }
   for (const [id, body] of Object.entries(bodies)) body.visible = id === current;
   function shoot() {
+    if (current === 'grenade') return;
     if (current === 'knife') {
       rigs.knife.swing();
       return;
@@ -182,6 +190,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     shell.velocity.set(0.58 + Math.random() * 0.27, 0.46 + Math.random() * 0.17, 0.06);
   }
   function muzzleOrigin(worldCamera, out) {
+    if (current === 'grenade') return out.copy(worldCamera.position);
     if (current === 'knife') rigs.knife.tipOrigin(out);
     else bodies[current].localToWorld(out.copy(rigs[current].tip));
     out.project(camera);
@@ -189,9 +198,14 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     out.unproject(worldCamera).sub(worldCamera.position).normalize();
     return out.multiplyScalar(0.72).add(worldCamera.position);
   }
+  function grenadeOrigin(worldCamera,out) {
+    rigs.grenade.origin(out).project(camera);out.z=0;
+    out.unproject(worldCamera).sub(worldCamera.position).normalize();
+    return out.multiplyScalar(.75).add(worldCamera.position);
+  }
   function render(
     renderer, dt, moving, phase, empty, ads, steerX, steerY,
-    stride = 0, grounded = true, rounds = 0,
+    stride = 0, grounded = true, rounds = 0, grenadeState = null,
   ) {
     updateDraw(dt);
     const machineGun = current === 'mg3',
@@ -208,7 +222,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     // Keep the gun, skinned hands and effect sockets in the same scaled space.
     const aspect = worldCamera.aspect, wide = s(aspect, 0.52, 1.48);
     const gunScale = longGun ? lerp(1.13, 1.36, wide) : lerp(1.20, 1.39, wide);
-    if (current !== 'knife') bodies[current].scale.setScalar(gunScale);
+    if (current !== 'knife' && current !== 'grenade') bodies[current].scale.setScalar(gunScale);
     if (current === selected) {
       camera.fov = longGun ? lerp(lerp(58, 53.5, wide), 59, ads) : current === 'knife' ? 59 : lerp(58, 54.5, wide);
     }
@@ -232,6 +246,9 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
       root.position.set(0, 0, 0);
       root.rotation.set(0, 0, 0);
       rig.update(dt, grounded ? moving : 0, aspect, steerX, steerY, stride);
+    } else if (current === selected && current === 'grenade') {
+      root.position.set(0,0,0); root.rotation.set(0,0,0);
+      rig.update(dt, grounded ? moving : 0, aspect, steerX, steerY, stride, grenadeState, rounds);
     } else if (current === selected) {
       if (!longGun) ads = 0;
       rig.pose(phase, empty, cycle, ads, rounds);
@@ -257,7 +274,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
       );
     }
     carrier.updateMatrixWorld(true);
-    if (current !== 'knife')
+    if (current !== 'knife' && current !== 'grenade')
       flash.update(bodies[current].localToWorld(muzzle.copy(rig.tip)), dt, ads, gunScale);
     for (const v of vapors) {
       v.age += dt;
@@ -288,5 +305,5 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     await renderer.compileAsync(scene,camera);
     await warmRender(renderer,scene,camera);
   }
-  return { render, equip, shoot, muzzleOrigin, isReady, setWorld, warmup, meleeImpact: rigs.knife.impact };
+  return { render, equip, shoot, muzzleOrigin, grenadeOrigin, isReady, setWorld, warmup, meleeImpact: rigs.knife.impact };
 }

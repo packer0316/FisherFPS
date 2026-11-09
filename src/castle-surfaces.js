@@ -37,7 +37,7 @@ function projected(material,scale,patina,clock,marble=false,metal=false) {
           diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.046,.069,.058),oxide*.62);`:''}
       `)
       .replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
-        roughnessFactor=clamp(roughnessFactor+(.5-worn.g)*.17-damp*.15,.24,.96);
+        roughnessFactor=clamp(roughnessFactor+(.5-worn.g)*.25-damp*.18,.20,.96);
       `).replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
         // Low-cost flickering candle bounce along the niches, without extra lights.
         float bay=mod(surfaceP.z-1.4+4.,8.)-4.;
@@ -84,18 +84,24 @@ function damask() {
 export function makeCastleSurfaces(tex,patina,breeze) {
   const normal=tex('/surfaces/plaster-nor_gl.webp',false),rough=tex('/surfaces/plaster-rough.webp',false);
   const plaster=projected(new T.MeshStandardMaterial({color:0xb9af96,map:tex('/surfaces/plaster-diff.webp'),normalMap:normal,normalScale:new T.Vector2(.65,.65),roughnessMap:rough,roughness:.92}),.52,patina,breeze);
-  const stone=projected(new T.MeshStandardMaterial({color:0xaaa58f,normalMap:normal,normalScale:new T.Vector2(.18,.18),roughness:.48,metalness:.04}),.65,patina,breeze,true);
-  const shadowStone=projected(new T.MeshStandardMaterial({color:0x1c2728,normalMap:normal,normalScale:new T.Vector2(.16,.16),roughness:.35,metalness:.12}),.65,patina,breeze,true);
+  const stone=projected(new T.MeshPhysicalMaterial({color:0xc1b8a4,normalMap:normal,normalScale:new T.Vector2(.22,.22),roughness:.43,metalness:.04,clearcoat:.22,clearcoatRoughness:.34}),.65,patina,breeze,true);
+  const shadowStone=projected(new T.MeshPhysicalMaterial({color:0x222633,normalMap:normal,normalScale:new T.Vector2(.16,.16),roughness:.31,metalness:.12,clearcoat:.3,clearcoatRoughness:.28}),.65,patina,breeze,true);
   const panel=projected(new T.MeshStandardMaterial({map:damask(),normalMap:normal,normalScale:new T.Vector2(.22,.22),roughness:.68}),.66,patina,breeze);
   const bronze=projected(new T.MeshStandardMaterial({color:0x807052,metalness:.78,roughness:.43}),.8,patina,breeze,false,true);
-  const gold=projected(new T.MeshStandardMaterial({color:0xbaa174,metalness:.72,roughness:.37}),.8,patina,breeze,false,true);
+  const gold=projected(new T.MeshStandardMaterial({color:0xd4ad69,metalness:.82,roughness:.30,envMapIntensity:1.35,normalMap:normal,normalScale:new T.Vector2(.10,.10)}),.8,patina,breeze,false,true);
   const iron=new T.MeshStandardMaterial({color:0x15191d,metalness:.68,roughness:.57});
   const wood=projected(new T.MeshStandardMaterial({color:0x624738,map:tex('/surfaces/wood-diff.webp'),normalMap:tex('/surfaces/wood-nor_gl.webp',false),normalScale:new T.Vector2(.3,.3),roughnessMap:tex('/surfaces/wood-rough.webp',false),roughness:.62}),.68,patina,breeze);
   const velvet=new T.MeshPhysicalMaterial({color:0x300e1b,roughness:.91,side:T.DoubleSide,sheen:1,sheenColor:0x75404e,sheenRoughness:.8,normalMap:normal,normalScale:new T.Vector2(.035,.035)});
   const glass=tex('/castle/mourner-glass-v2.png');glass.wrapS=glass.wrapT=T.ClampToEdgeWrapping;
-  const glazing=new T.MeshStandardMaterial({map:glass,emissiveMap:glass,emissive:0xb4c9dd,emissiveIntensity:.85,
+  const glazing=new T.MeshStandardMaterial({map:glass,emissiveMap:glass,emissive:0xb4c9ff,emissiveIntensity:1.25,
     roughness:.23,metalness:.07,envMapIntensity:.65,normalMap:normal,normalScale:new T.Vector2(.04,.04)});
-  const roseGlass=new T.MeshBasicMaterial({map:glass,color:0x9caec2});
+  glazing.onBeforeCompile=s=>{
+    s.fragmentShader=s.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      vec3 glassTint=mix(vec3(.42,.65,1.25),vec3(1.1,.35,.58),smoothstep(-.4,.65,sin(vMapUv.y*10.+vMapUv.x*5.)));
+      totalEmissiveRadiance*=glassTint;`);
+  };
+  glazing.customProgramCacheKey=()=> 'castle-jewel-glass';
+  const roseGlass=new T.MeshBasicMaterial({map:glass,color:0xd3c4ee});
   roseGlass.onBeforeCompile=s=>{
     s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`
       vec2 p=vMapUv*2.-1.;float r=length(p);
@@ -104,12 +110,13 @@ export function makeCastleSurfaces(tex,patina,breeze) {
       if(mod(floor(petal),2.)>.5)sampleUv.x=1.-sampleUv.x;
       if(r<.19)sampleUv=vec2(.43,.64)+p*vec2(.85,.567);
       diffuseColor*=texture2D(map,sampleUv);
+      diffuseColor.rgb*=mix(vec3(.6,.8,1.35),vec3(1.35,.48,.72),.5+.5*sin(floor(petal)*2.4+r*5.));
     `);
   };
   roseGlass.customProgramCacheKey=()=> 'mourner-rose-glass-v2';
-  const ceiling=projected(new T.MeshStandardMaterial({color:0x273233,map:plaster.map,normalMap:normal,normalScale:new T.Vector2(.4,.4),roughness:.86,side:T.DoubleSide}),.45,patina,breeze);
+  const ceiling=projected(new T.MeshStandardMaterial({color:0x465258,map:plaster.map,normalMap:normal,normalScale:new T.Vector2(.4,.4),roughness:.86,side:T.DoubleSide}),.45,patina,breeze);
   const fresco=tex('/castle/ceiling-fresco-v2.png');fresco.wrapS=fresco.wrapT=T.ClampToEdgeWrapping;
-  const frescoMat=new T.MeshStandardMaterial({map:fresco,color:0xc2ae91,roughness:1,emissiveMap:fresco,emissive:0xffffff,emissiveIntensity:.09,side:T.DoubleSide});
+  const frescoMat=new T.MeshStandardMaterial({map:fresco,color:0xc2ae91,roughness:1,emissiveMap:fresco,emissive:0xffffff,emissiveIntensity:.16,side:T.DoubleSide});
   return {plaster,stone,shadowStone,panel,bronze,gold,iron,wood,velvet,glazing,roseGlass,ceiling,frescoMat};
 }
 export function castleNightEnvironment() {

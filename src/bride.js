@@ -48,9 +48,9 @@ export async function loadBride(scene,world,particles,groundImpact) {
     const moon=/Moon/.test(o.name);
     if(!materials.has(moon)) {
       const m=o.material.clone();m.name=moon?'Haunted moon':'Eternal Bride';
-      m.normalMap=maps[moon?4:0];m.normalScale.set(.65,.65);
-      m.metalnessMap=maps[moon?5:1];m.metalness=moon?.48:.38;
-      m.roughnessMap=maps[moon?6:2];m.roughness=.88;m.envMapIntensity=.6;
+      m.normalMap=maps[moon?4:0];m.normalScale.set(moon?.9:.75,moon?.9:.75);
+      m.metalnessMap=maps[moon?5:1];m.metalness=moon?.62:.38;
+      m.roughnessMap=maps[moon?6:2];m.roughness=moon?.72:.82;m.envMapIntensity=moon?1.1:.8;
       if(!moon){m.emissiveMap=maps[3];m.emissive.set(0x9b48e6);m.emissiveIntensity=.25;}
       customize(m);addCastleCharacterLight(m,moon?.24:.40);materials.set(moon,m);
     }

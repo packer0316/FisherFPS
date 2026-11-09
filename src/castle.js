@@ -5,24 +5,28 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeCastleSurfaces, castleNightEnvironment } from './castle-surfaces.js';
 import { decorateCastle } from './castle-ornament.js';
 import { makeCandleFlames } from './candle-flames.js';
+import { addCastleGrandeur, castleMonuments } from './castle-grandeur.js';
+import { makeCastleAtmosphere } from './castle-atmosphere.js';
+import { addCastleSettees } from './castle-furniture.js';
+import { loadCastleCherubs } from './castle-cherubs.js';
 
 // La Veuve: a ruined wedding gallery, 44 × 56 m, with a 20 m coffered barrel vault.
 // Static ornament is batched by material and bay. Statues share GPU buffers.
 export async function makeCastle(scene, coarse, environment) {
   const halfX=22, halfZ=28, breeze={value:0}, colliders=[], zones=[], batches=new Map();
   scene.background=new T.Color(0x05090e);
-  scene.fog=new T.FogExp2(0x0c1219,.018);
-  scene.environment=castleNightEnvironment();scene.environmentIntensity=.6;
+  scene.fog=new T.FogExp2(0x111624,.012);
+  scene.environment=castleNightEnvironment();scene.environmentIntensity=.95;
   scene.environmentRotation.set(0,1.1,0);
-  scene.add(new T.HemisphereLight(0x91aabf,0x292323,.46));
-  const sun=new T.DirectionalLight(0x95b5d6,.74);
+  scene.add(new T.HemisphereLight(0x9cb9db,0x423043,.8));
+  const sun=new T.DirectionalLight(0xabcaff,1.5);
   sun.position.set(-18,13,-20);sun.target.position.set(4,0,8);
   sun.castShadow=true;sun.shadow.mapSize.setScalar(coarse?1024:2048);
   Object.assign(sun.shadow.camera,{left:-33,right:33,top:38,bottom:-38,near:1,far:85});
   sun.shadow.camera.updateProjectionMatrix();sun.shadow.normalBias=.035;sun.shadow.bias=-.00025;
   scene.add(sun,sun.target);
-  const rim=new T.DirectionalLight(0x8d95b0,.26);rim.position.set(16,12,22);scene.add(rim);
-  const ceilingBounce=new T.DirectionalLight(0x85745b,.38);
+  const rim=new T.DirectionalLight(0x9faedb,.8);rim.position.set(16,12,22);scene.add(rim);
+  const ceilingBounce=new T.DirectionalLight(0xb29269,.65);
   ceilingBounce.position.set(0,3,6);ceilingBounce.target.position.set(0,18,0);scene.add(ceilingBounce,ceilingBounce.target);
   const texLoader=new T.TextureLoader();
   function tex(url,color=true) {
@@ -56,7 +60,8 @@ export async function makeCastle(scene, coarse, environment) {
       `);
   };
   wax.customProgramCacheKey=()=> 'candle-wax-transmitted-light';
-  const floor=new T.MeshPhysicalMaterial({color:0xffffff,roughness:.31,metalness:.07,envMapIntensity:.9,clearcoat:.23,clearcoatRoughness:.25});
+  const floorNormal=tex('/surfaces/plaster-nor_gl.webp',false);floorNormal.repeat.set(26,34);
+  const floor=new T.MeshPhysicalMaterial({color:0xffffff,roughness:.31,metalness:.07,envMapIntensity:1.2,clearcoat:.36,clearcoatRoughness:.22,normalMap:floorNormal,normalScale:new T.Vector2(.065,.065)});
   floor.onBeforeCompile=s=>{
     s.uniforms.patina={value:patina};
     s.vertexShader='varying vec3 castleP;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncastleP=position;');
@@ -75,9 +80,7 @@ export async function makeCastle(scene, coarse, environment) {
         marble*=.77+.28*dirt.g;
         marble=mix(marble,vec3(.12,.105,.107),vein);
         float outer=step(19.8,abs(p.x));
-        float line=(1.-smoothstep(.035,.07,abs(abs(p.x)-19.5)))+(1.-smoothstep(.035,.07,abs(abs(p.y)-25.4)));
         diffuseColor.rgb=mix(marble,vec3(.045,.039,.048),outer);
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.34,.23,.092),clamp(line,0.,1.));
         diffuseColor.rgb*=1.-.46*seam;
       // Soft window pools supply spatial lighting without another shadow map.
       float pool=exp(-pow((p.x+6.+sin(p.y*.16)*2.)/10.,2.))*pow(max(0.,cos((p.y+4.)*.39)),6.);
@@ -85,7 +88,7 @@ export async function makeCastle(scene, coarse, environment) {
       float rot=max(smoothstep(17.,21.5,abs(p.x)),smoothstep(21.,27.5,abs(p.y)))*smoothstep(.28,.67,dirt.r);
       diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.035,.018,.024),rot*.82);
       `).replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
-        roughnessFactor=clamp(.19+.34*dirt.r+.2*seam,.22,.76);`);
+        roughnessFactor=clamp(.19+.34*dirt.r+.2*seam,.19,.76);`);
   };
   floor.customProgramCacheKey=()=> 'castle-marble-v1';
   function add(g,m,kind='wall') {
@@ -110,6 +113,7 @@ export async function makeCastle(scene, coarse, environment) {
   }
   box(0,-.22,0,44,.44,56,floor);
   decorateCastle({scene,add,box,cyl,tube,ring,solid,surfaces,coarse});
+  addCastleGrandeur({add,box,cyl,tube,ring,solid,surfaces,coarse});
   // Ragged pleated drapery frames the altar without closing the combat floor.
   for(const side of [-1,1]) {
     const g=new T.PlaneGeometry(5,11.7,32,20),p=g.attributes.position;
@@ -120,12 +124,7 @@ export async function makeCastle(scene, coarse, environment) {
   box(0,.23,-24,12,.46,5,stone,true);
   box(0,.73,-24.8,5.8,.6,1.5,wood,true);
   box(0,1.1,-24.8,6.3,.16,1.8,stone);
-  // Sparse cover, jumpable benches. Broad lanes stay free for the procession.
-  for(const side of [-1,1])for(const z of [-14,3,18]) {
-    box(side*13.4,.65,z,4.7,.22,1.3,wood,true);
-    for(const dx of [-1.9,1.9])box(side*13.4+dx,.3,z,.22,.6,1.1,bronze,true);
-    box(side*13.4,1.3,z+.55,4.7,.9,.18,wood,true);
-  }
+  addCastleSettees({add,box,cyl,tube,solid,surfaces});
   // Candles share two flame draws and three local lights, with no extra shadow passes.
   const candleOrigins=[],candleLights=[];
   const wick=mat(0x17110c);
@@ -157,11 +156,18 @@ export async function makeCastle(scene, coarse, environment) {
         candle(x,y+.1,z+dz,.45+(i%3)*.15);
       }
     }
-    const light=new T.PointLight(0xffb56e,78,24,1.85);light.position.set(0,8,z);scene.add(light);candleLights.push(light);
+    const light=new T.PointLight(0xffba78,110,29,1.8);light.position.set(0,8,z);scene.add(light);candleLights.push(light);
   }
   for(const side of [-1,1])for(let z=-24;z<=24;z+=8)for(let j=0;j<3;j++)candle(side*(19.6+j*.2),.05,z+1.4,.28+j*.22);
   for(let j=0;j<9;j++)candle((j-4)*.62,1.18,-24.7,.32+(j%3)*.22);
-  const altarGlow=new T.PointLight(0xad87b1,22,18,1.8);altarGlow.position.set(0,4.6,-22);scene.add(altarGlow);candleLights.push(altarGlow);
+  const altarGlow=new T.PointLight(0xb884ff,75,30,1.65);altarGlow.position.set(0,6,-22);scene.add(altarGlow);candleLights.push(altarGlow);
+  // Broad grazing lights reveal sculpted feather ridges and fluted columns.
+  // Only the moon casts a shadow map; these two theatrical fills are inexpensive.
+  for(const side of [-1,1]) {
+    const light=new T.SpotLight(side<0?0x88baff:0xffc48b,170,57,.72,.85,1.35);
+    light.position.set(side*10,13,23);light.target.position.set(side*18,5,-16);
+    scene.add(light,light.target);
+  }
   makeCandleFlames(scene,candleOrigins,breeze,candleLights);
   // Sinewy growth crawls from the bases of the statues and across the rear wall.
   let seed=273119;const rand=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
@@ -193,15 +199,19 @@ export async function makeCastle(scene, coarse, environment) {
     const bounds=new T.Box3().setFromObject(base),center=bounds.getCenter(new T.Vector3()),height=index?3.65:2.2;
     const factor=height/(bounds.max.y-bounds.min.y);
     const placements=[];
-    for(const side of [-1,1])for(let bay=0;bay<7;bay++)if(bay%2===index)placements.push({side,z:-24+bay*8});
+    for(const side of [-1,1])for(let bay=0;bay<7;bay++)if(index===0&&bay%2===0)
+      placements.push({x:side*20.7,y:1.55,z:-24+bay*8,yaw:-side*Math.PI/2,scale:1,depth:1});
+    if(index===1)for(const p of castleMonuments)
+      placements.push({x:p.x,y:1.78,z:p.z,yaw:-p.side*.18,scale:p.height/height,depth:1});
     base.traverse(o=>{
       if(!o.isMesh)return;
-      const m=o.material.clone();m.color.set(0xe6dfd2);m.roughness=.79;m.metalness=0;
+      const m=o.material.clone();m.color.set(0xe6dfd2);m.roughness=.55;m.metalness=.04;m.envMapIntensity=1.1;
       m.roughnessMap=null;m.metalnessMap=null;
       // Refinish the scan as aged white plaster, preserving sculpted normals and AO.
       m.onBeforeCompile=s=>{
+        s.uniforms.sculptWear={value:patina};
         s.vertexShader='varying vec3 sculptP;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsculptP=position;');
-        s.fragmentShader='varying vec3 sculptP;\n'+s.fragmentShader;
+        s.fragmentShader='varying vec3 sculptP;uniform sampler2D sculptWear;\n'+s.fragmentShader;
         s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
           float luminance=dot(diffuseColor.rgb,vec3(.2126,.7152,.0722));
           diffuseColor.rgb=vec3(.73,.70,.64)*(.65+.35*sqrt(clamp(luminance,0.,1.)));
@@ -209,42 +219,30 @@ export async function makeCastle(scene, coarse, environment) {
           float tear=exp(-pow((abs(sculptP.x)-.14)/.031,2.))*smoothstep(h*.53,h*.67,sculptP.y)*
             (1.-smoothstep(h*.78,h*.84,sculptP.y))*smoothstep(.09,.22,sculptP.z);
           diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.026,.014,.021),tear*.94);
+          float wear=texture2D(sculptWear,sculptP.xy*.8+sculptP.z*.21).g;
+          float vein=1.-smoothstep(.025,.09,abs(sin(sculptP.y*3.+sculptP.x*2.+wear*3.)));
+          diffuseColor.rgb*=.88+wear*.18;
+          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.18,.15,.21),vein*.16);
         `);
+        s.fragmentShader=s.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+          roughnessFactor=clamp(.42+wear*.3,.42,.78);`);
       };
       m.customProgramCacheKey=()=> 'aged-white-plaster-statue-'+index;
       if(m.map)m.map.anisotropy=coarse?2:4;
       const geometry=o.geometry.clone().applyMatrix4(o.matrixWorld);
       geometry.translate(-center.x,-bounds.min.y,-center.z).scale(factor,factor,factor);
       const mesh=new T.InstancedMesh(geometry,m,placements.length),dummy=new T.Object3D();
-      placements.forEach(({side,z},i)=>{
-        dummy.position.set(side*20.7,1.55,z);dummy.rotation.y=-side*Math.PI/2;dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);
+      placements.forEach(({x,y,z,yaw,scale,depth},i)=>{
+        dummy.position.set(x,y,z);dummy.rotation.y=yaw;dummy.scale.set(scale,scale,scale*depth);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);
       });
+      mesh.name=index?'castle-guardian-statues':'castle-memorial-reliefs';
       mesh.castShadow=mesh.receiveShadow=true;mesh.userData.impactKind='wall';scene.add(mesh);
       // Collider pedestals block the actors; the actual statues still stop bullets.
       zones.push(mesh);
     });
   });
-  // Thin drifting ground mist + dust: two draw calls; no transparent full-screen layers.
-  const pos=new Float32Array((coarse?80:170)*3);
-  for(let i=0;i<pos.length;i+=3){pos[i]=(rand()-.5)*42;pos[i+1]=rand()*15+.2;pos[i+2]=(rand()-.5)*54;}
-  const dust=new T.BufferGeometry();dust.setAttribute('position',new T.BufferAttribute(pos,3));
-  scene.add(new T.Points(dust,new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,uniforms:{clock:breeze},
-    vertexShader:`uniform float clock;varying float a;void main(){vec3 p=position;p.x+=sin(clock*.2+p.y)*.4;p.y+=sin(clock*.25+p.z)*.3;vec4 v=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*v;gl_PointSize=clamp(27./max(1.,-v.z),1.,2.7);a=.17+.1*sin(clock+p.x);}`,
-    fragmentShader:'varying float a;void main(){gl_FragColor=vec4(.66,.69,.87,a*(1.-smoothstep(.12,.49,length(gl_PointCoord-.5))));}'
-  })));
-  const haze=new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,uniforms:{clock:breeze},vertexShader:'varying vec2 p;void main(){p=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader:`varying vec2 p;uniform float clock;void main(){float n=sin(p.x*25.+clock*.12+sin(p.y*17.))*sin(p.y*19.-clock*.08);float edge=smoothstep(0.,.2,p.x)*smoothstep(0.,.2,1.-p.x)*smoothstep(0.,.2,p.y)*smoothstep(0.,.2,1.-p.y);gl_FragColor=vec4(.4,.39,.56,max(0.,n)*edge*.1);}`});
-  scene.add(new T.Mesh(new T.PlaneGeometry(40,50).rotateX(-Math.PI/2).translate(0,.22,0),haze));
-  const shafts=[];
-  for(const z of [-20,-4,12]){
-    const g=new T.BufferGeometry();
-    g.setAttribute('position',new T.Float32BufferAttribute([-21,13,z-1.5,-21,13,z+1.5,4,.1,z+9,4,.1,z+5],3));
-    g.setAttribute('uv',new T.Float32BufferAttribute([0,1,1,1,1,0,0,0],2));g.setIndex([0,1,2,0,2,3]);shafts.push(g);
-  }
-  const beam=new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending,
-    vertexShader:'varying vec2 p;void main(){p=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader:'varying vec2 p;void main(){float a=pow(sin(p.x*3.14159),2.)*sin(p.y*3.14159)*.055;gl_FragColor=vec4(.35,.46,.8,a);}'});
-  scene.add(new T.Mesh(mergeGeometries(shafts),beam));shafts.forEach(g=>g.dispose());
+  await loadCastleCherubs(scene,zones,coarse);
+  makeCastleAtmosphere(scene,breeze,coarse,glazing.map);
   const overlap=(b,x,z,r)=>x+r>b.min.x&&x-r<b.max.x&&z+r>b.min.z&&z-r<b.max.z;
   function blocked(x,z,r=.32,feet=0,height=1.84,step=.24) {
     return Math.abs(x)>halfX-r||Math.abs(z)>halfZ-r||colliders.some(b=>overlap(b,x,z,r)&&b.max.y>feet+step&&b.min.y<feet+height-.002);
