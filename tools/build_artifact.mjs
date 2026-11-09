@@ -22,6 +22,8 @@ const SKIP = new Set([
   'station/SOURCE.json',
   'station/material-sources.json',
   'lobby/SOURCE.json',
+  'lobby/hunt-title-source.json',
+  'lobby/operator-lobby-source.json',
   'castle/GENERATED-ASSETS.md',
   'reward-tags/GENERATED-ASSETS.md',
 ]);
