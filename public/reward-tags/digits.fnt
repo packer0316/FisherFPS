@@ -1,0 +1,17 @@
+info face="Dustline Metal" size=292 bold=1 italic=1 charset="" unicode=1 stretchH=100 smooth=1 aa=1 padding=0,0,0,0 spacing=0,0
+common lineHeight=304 base=298 scaleW=1448 scaleH=1086 pages=1 packed=0
+page id=0 file="digits.png"
+chars count=12
+char id=48 x=67 y=84 width=286 height=290 xoffset=11 yoffset=8 xadvance=308 page=0 chnl=15
+char id=49 x=441 y=84 width=217 height=292 xoffset=45 yoffset=6 xadvance=308 page=0 chnl=15
+char id=50 x=748 y=84 width=295 height=290 xoffset=6 yoffset=8 xadvance=308 page=0 chnl=15
+char id=51 x=1100 y=84 width=283 height=290 xoffset=12 yoffset=8 xadvance=308 page=0 chnl=15
+char id=52 x=64 y=436 width=273 height=290 xoffset=17 yoffset=8 xadvance=308 page=0 chnl=15
+char id=53 x=405 y=437 width=286 height=289 xoffset=11 yoffset=9 xadvance=308 page=0 chnl=15
+char id=54 x=750 y=435 width=296 height=291 xoffset=6 yoffset=7 xadvance=308 page=0 chnl=15
+char id=55 x=1140 y=436 width=261 height=290 xoffset=23 yoffset=8 xadvance=308 page=0 chnl=15
+char id=56 x=47 y=771 width=294 height=289 xoffset=7 yoffset=9 xadvance=308 page=0 chnl=15
+char id=57 x=398 y=772 width=291 height=288 xoffset=8 yoffset=10 xadvance=308 page=0 chnl=15
+char id=44 x=839 y=922 width=117 height=136 xoffset=6 yoffset=162 xadvance=129 page=0 chnl=15
+char id=43 x=1138 y=808 width=233 height=207 xoffset=6 yoffset=48 xadvance=245 page=0 chnl=15
+kernings count=0

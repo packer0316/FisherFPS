@@ -6,6 +6,7 @@ import { makeHuntNavigation } from './hunt-navigation.js';
 import { addCastleCharacterLight } from './castle-character-light.js';
 import { makeAnimatedRaycast } from './animated-raycast.js';
 import { warmRender } from './render-warmup.js';
+import { attachTargetNodes, targetNodePosition } from './target-nodes.js';
 
 const types = [
   {
@@ -145,10 +146,9 @@ export async function loadHunt(scene, world, boss = null) {
     blockHits = [];
   ray.firstHitOnly = true;
   const navigation=makeHuntNavigation(world);
-  if(boss)boss.hitTest=makeAnimatedRaycast(boss.model);
+  if(boss){boss.hitTest=makeAnimatedRaycast(boss.model);attachTargetNodes(boss);}
   const pos = new T.Vector3(),
     projected = new T.Vector3(),
-    eyeDir = new T.Vector3(),
     delta = new T.Vector3();
   const box = new T.Box3(),
     point = new T.Vector3(),
@@ -210,7 +210,7 @@ export async function loadHunt(scene, world, boss = null) {
     scene.add(root);
     const chest = bones.find((n) => /spine2|spine1|chest/i.test(n.name));
     const head = bones.find((n) => /head$/i.test(n.name));
-    return {
+    const actor = {
       root,
       nav: navigation.createState(),
       command: {active:false,time:0,speed:1,goal:new T.Vector3()},
@@ -247,6 +247,7 @@ export async function loadHunt(scene, world, boss = null) {
       anchor: spot.clone(),
       height: type.height,
     };
+    attachTargetNodes(actor);return actor;
   }
   const packs = [];
   const clusterSlots = [0, 3, 4, 7, 10];
@@ -726,26 +727,6 @@ export async function loadHunt(scene, world, boss = null) {
     }
     return false;
   }
-  function select(camera, current) {
-    let selected = null,
-      best = Infinity;
-    camera.getWorldDirection(eyeDir);
-    for (const e of targets) {
-      if (!e.alive) continue;
-      aimPoint(e, pos);
-      delta.subVectors(pos, camera.position);
-      const distance = delta.length();
-      const score =
-        1 -
-        delta.dot(eyeDir) / Math.max(0.001, distance) +
-        distance * 0.00055 -
-        (e === current ? 0.065 : 0);
-      if (score >= best || !inSight(camera, e, pos)) continue;
-      best = score;
-      selected = e;
-    }
-    return selected;
-  }
   const shotRay = new T.Raycaster();
   shotRay.firstHitOnly = true;
   const hits = [];
@@ -825,5 +806,12 @@ export async function loadHunt(scene, world, boss = null) {
     await warmRender(renderer,scene,camera);
     warmed=true;
   }
-  return { enemies, targets, populate, update, kill, aimPoint, inSight, select, traceShot, summon, command, clearCommands,warmup };
+  return { enemies, targets, populate, update, kill, aimPoint, inSight, traceShot, summon, command, clearCommands,warmup,
+    nodeAimPoint:targetNodePosition,
+    canAimFrom(origin,e,out,index=0){
+      if(!e.alive||e.opacity<.22)return false;
+      targetNodePosition(e,index,out);return openLine({position:origin},out);
+    },
+    get roster(){return [...new Map(targets.map(e=>[e.type.id,{...e.type,actor:e}])).values()];},
+  };
 }

@@ -2,6 +2,8 @@ import './style.css';
 import './prison-ui.css';
 import './boss-victory.css';
 import './lobby.css';
+import './auto-play.css';
+import './reward-tags.css';
 import * as T from 'three';
 import { makeWorld, spawn } from './world.js';
 import { makeViewmodel, startingWeapon, weapons } from './weapons.js';
@@ -9,6 +11,7 @@ import { makeEffects } from './effects.js';
 import { loadCombatParticles } from './combat-particles.js';
 import { loadHunt } from './hunt.js';
 import { loadRewardCoins } from './reward-coins.js';
+import { loadRewardTags } from './reward-tags.js';
 import { makeBossPayout } from './boss-payout.js';
 import { loadBossSupplies, makeSupplyEffects } from './boss-supplies.js';
 import { $, gunIcon, makeRadar } from './ui.js';
@@ -18,6 +21,8 @@ import { makeDamageFeedback } from './damage-feedback.js';
 import { makeGrenadeState } from './grenade-state.js';
 import { grenadeStats, throwVelocity, blastDamage } from './grenade-physics.js';
 import { makeGrenadeProjectiles } from './grenade-projectiles.js';
+import { makeAutoPlayer } from './auto-play.js';
+import { makeAutoPlayUI } from './auto-play-ui.js';
 
 async function boot() {
   const canvas = $('world'),
@@ -42,11 +47,12 @@ async function boot() {
   const player = { x: spawn.x, z: spawn.z, yaw: -0.122, pitch: 0.053 };
   const lookInput=makeLookInput();
   let world = makeWorld(scene, renderer, coarse);
-  let [hunt, particles, view, rewardCoins] = await Promise.all([
+  let [hunt, particles, view, rewardCoins, rewardTags] = await Promise.all([
     loadHunt(scene, world),
     loadCombatParticles(renderer, $('wallet-pickup')),
     makeViewmodel(scene, camera, world.sun),
     loadRewardCoins(scene, world, camera, coarse),
+    loadRewardTags($('hud')),
   ]);
   let fx = makeEffects(scene, particles.playBlood),
     radar = makeRadar(world, player);
@@ -67,6 +73,9 @@ async function boot() {
     ammo: { grenade: grenadeStats.supply, ...Object.fromEntries(Object.entries(weapons).filter(([, w]) => w.mag).map(([id, w]) => [id, w.mag])) },
   };
   const grenade = makeGrenadeState(throwGrenade);
+  const pilot=makeAutoPlayer(),pilotPosition=new T.Vector3();
+  let autoReturn='pause';
+  const autoUI=makeAutoPlayUI({onStart:startAutoPlay,onClose:closeAutoPlay});
   let grenades = makeGrenadeProjectiles(scene,world,explodeGrenade,grenadeBounce);
   const playerVelocity = new T.Vector3(), previousPlayer = new T.Vector3();
   const keys = new Set(),
@@ -81,11 +90,9 @@ async function boot() {
     clock = 0,
     shotTime = 0,
     reloadLeft = 0,
-    steering = 0,
     swayX = 0,
     swayY = 0;
-  let scanLeft = 0,
-    uiLeft = 0,
+  let uiLeft = 0,
     flashLeft = 0,
     rewardLeft = 0,
     toastLeft = 0,
@@ -121,8 +128,7 @@ async function boot() {
     camera.updateProjectionMatrix();
     $('reticle').style.opacity = String(1 - T.MathUtils.smoothstep(ads, 0.04, 0.62));
   }
-  let autoFire = false,
-    triggerHeld = false,
+  let triggerHeld = false,
     triggerTap = false;
   const gravity = 9.81, standingHeight = 1.84, crouchedHeight = 1.23;
   let feet = world.terrainHeight(player.x, player.z),
@@ -164,6 +170,8 @@ async function boot() {
     weapon = () => weapons[economy.weapon];
   function alignWallet() {
     rewardCoins.setWalletTarget($('wallet-anchor').getBoundingClientRect(), canvas.getBoundingClientRect());
+    rewardTags.align($('wallet-anchor').closest('.vitals').getBoundingClientRect(), innerWidth,
+      document.querySelector('header').getBoundingClientRect().bottom + 6);
   }
   function resize() {
     lookInput.clear(performance.now());
@@ -215,9 +223,6 @@ async function boot() {
     $('capacity').parentElement.hidden = manual;
     $('capacity').textContent = weapon().mag ?? '';
     $('reload-btn').hidden = manual;
-    $('auto-btn').disabled = manual;
-    $('auto-btn').setAttribute('aria-pressed', String(!manual && autoFire));
-    $('auto-label').textContent = throwable ? '按住蓄力 · 放開投擲' : knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
     $('fire-btn').setAttribute('aria-label',throwable?'按住拔銷蓄力，放開投擲':'射擊');
     $('weapon-name').textContent = weapon().name;
     $('cost').textContent = throwable ? '配發 5 顆 · 不扣金幣' : knife ? '近戰距離 2.5 公尺' : economy.bet + ' 幣 / 發';
@@ -241,18 +246,20 @@ async function boot() {
     moving = 0;
   }
   function setMode(next) {
+    if(next!=='play')stopAutoPlay(false);
     mode = next;
     if (next !== 'play' && next !== 'result') damageFeedback.clear();
     if (next !== 'play') setScope(false);
     stopInput();
     lock = null;
-    scanLeft = 0;
     $('app').classList.toggle('playing', next === 'play');
     atHome=next==='home'||(next==='shop'&&shopReturn==='home')||(next==='challenges'&&bossReturn==='home');
     $('app').classList.toggle('at-home',atHome);
     $('app').classList.toggle('paused',next==='pause');
     $('lobby').hidden=next!=='home';
     $('pause-home').hidden=next!=='pause';
+    $('pause-autoplay').hidden=next!=='pause';
+    $('pause-boss').hidden=next!=='pause';
     document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     alignWallet();
     $('brief').hidden = next !== 'ready' && next !== 'pause';
@@ -265,12 +272,42 @@ async function boot() {
       play: '獵殺進行中',
       shop: '軍械整備中',
       challenges: '挑戰選擇', result: '挑戰結束',
+      autoplay:'自動遊玩設定',
     }[next];
     $('deploy').querySelector('strong').textContent = next === 'pause' ? '返回' : '進入獵場';
     $('brief').querySelector('h1').innerHTML =
       next === 'pause' ? '行動暫停<span>.</span>' : '沙境獵場<span>.</span>';
     if (next !== 'play' && document.pointerLockElement === canvas) document.exitPointerLock();
   }
+  function autoContext(){
+    return {world,hunt,economy,grenade,position:pilotPosition.set(player.x,feet,player.z),eye:camera.position,
+      velocity:playerVelocity,grounded,ready:view.isReady(),hazards:warden?.hazards??[],pickups:supplies?.pickups??[],health:warden?.health??100};
+  }
+  function stopAutoPlay(notify=true){
+    if(!pilot.enabled)return;
+    pilot.stop();stopInput();lock=null;$('autoplay-live').hidden=true;
+    if(notify)notice('已停止自動遊玩，切換為手動操作');
+  }
+  function openAutoPlay(){
+    if(loadingChallenge||bossVictory||!['home','ready','pause','play'].includes(mode))return;
+    autoReturn=mode;setMode('autoplay');
+    autoUI.open(hunt.roster,world.castle?'bride':warden?'warden':'desert',world.castle?'永夜古堡 · 冥婚大廳':warden?'C 區監獄中庭':'沙境獵場',economy.bet);
+  }
+  function closeAutoPlay(){
+    autoUI.close();
+    if(autoReturn==='play')deploy();else setMode(autoReturn);
+  }
+  function startAutoPlay(config){
+    if(economy.wallet<economy.bet){notice('賞金不足，請回大廳調整 BET');return;}
+    autoUI.close();setMode('play');cameraPose();
+    pilot.start(config,autoContext());dragFallback=true;
+    if(document.pointerLockElement===canvas)document.exitPointerLock();
+    $('autoplay-live').hidden=false;sync();
+    emit('hunt:resume',{wave:economy.wave,autoplay:true});
+  }
+  $('autoplay-btn').onclick=openAutoPlay;
+  $('pause-autoplay').onclick=openAutoPlay;
+  $('autoplay-stop').onclick=()=>stopAutoPlay();
   let dragFallback = false;
   async function deploy() {
     if (mode === 'play' || loadingChallenge) return;
@@ -326,6 +363,8 @@ async function boot() {
     levels.set(id,level);return level;
   }
   function activateLevel(level,pose) {
+    stopAutoPlay(false);
+    rewardTags.clear();
     grenades.dispose();
     bossVictory=null;
     $('app').classList.remove('settling');
@@ -344,7 +383,7 @@ async function boot() {
     kickPitch=kickYaw=swayX=swayY=shotTime=reloadLeft=meleeContact=0;
     setScope(false);ads=aimTravel=0;camera.fov=65;camera.updateProjectionMatrix();
     $('reticle').style.opacity='1';$('enemyhud').style.display='none';
-    flashLeft=rewardLeft=toastLeft=scanLeft=0;lock=null;stopInput();
+    flashLeft=rewardLeft=toastLeft=0;lock=null;stopInput();
     view.setWorld(scene,world.sun);particles.clearWorld();
     $('boss-health').hidden=$('player-health').hidden=!warden;
     damageFeedback.clear();
@@ -381,6 +420,7 @@ async function boot() {
   }
   function goHome(){
     if(loadingChallenge)return;
+    rewardTags.clear();
     settleBossOnLeave();
     warden?.stop();fx.clear();rewardCoins.clear();supplies?.clear();supplyEffects.clear();particles.clearWorld();
     if(warden) {
@@ -409,7 +449,11 @@ async function boot() {
   }
   function startBossShower() {
     if(bossVictory?.phase!=='death')return;
+    stopAutoPlay(false);
     const target=warden.target,origin=target.root.position.clone();origin.y=target.groundY;
+    const portrait=$('victory-portrait'),prisonBoss=bossVictory.species==='warden';
+    portrait.src=prisonBoss?'/prison/warden-victory.webp':'/castle/bride-victory.png';
+    portrait.alt=bossVictory.name;portrait.width=prisonBoss?282:600;portrait.height=prisonBoss?401:760;
     warden.stop();hunt.clearCommands?.();
     const plan=rewardCoins.burstBoss(origin,bossVictory.amount);
     bossVictory.payout=makeBossPayout(plan.amount,plan.count);
@@ -420,6 +464,7 @@ async function boot() {
     if(bossVictory?.phase!=='scatter')return;
     const p=bossVictory.payout;p.reveal();rewardCoins.collectBoss();
     bossVictory.phase='collect';
+    rewardTags.push({species:bossVictory.species,name:bossVictory.name,amount:p.amount,tier:'gold'});
     $('boss-result').classList.add('victory');
     $('victory-art').hidden=$('victory-score').hidden=false;
     $('result-title').textContent=bossVictory.name+'已擊倒';
@@ -473,7 +518,7 @@ async function boot() {
     if(remaining>0){economy.wallet+=remaining;sync();emit('wallet:bossCoin',{amount:remaining,total:bossVictory.amount});}
     bossVictory.flushed=true;
   }
-  $('boss-btn').onclick=openChallenges;$('close-boss').onclick=closeChallenges;
+  $('pause-boss').onclick=openChallenges;$('close-boss').onclick=closeChallenges;
   for(const id of ['warden','bride'])$('challenge-'+id).onclick=()=>enterChallenge(id);
   $('retry-warden').onclick=()=>enterChallenge();
   $('leave-prison').onclick=$('result-leave').onclick=leavePrison;
@@ -633,15 +678,6 @@ async function boot() {
     reloadLeft = reloadDuration;
     emit('weapon:reload', { weapon: economy.weapon });
   }
-  function toggleAuto() {
-    if (!weapon().mag) return;
-    autoFire = !autoFire;
-    lock = null;
-    scanLeft = 0;
-    $('auto-btn').setAttribute('aria-pressed', String(autoFire));
-    $('auto-label').textContent = autoFire ? '自動射擊：開' : '自動射擊：關';
-    ui();
-  }
   function jump() {
     if (mode === 'play' && grounded) jumpQueued = true;
   }
@@ -660,7 +696,6 @@ async function boot() {
     triggerHeld = false;
     grenade.release();
   }
-  $('auto-btn').onclick = toggleAuto;
   $('scope-btn').onclick = toggleScope;
   $('jump-btn').onpointerdown = jump;
   $('crouch-btn').onpointerdown = () => {
@@ -669,12 +704,14 @@ async function boot() {
     $('crouch-btn').setAttribute('aria-pressed', String(touchCrouch));
   };
   $('fire-btn').addEventListener('pointerdown', (e) => {
+    stopAutoPlay(false);
     e.currentTarget.setPointerCapture(e.pointerId);
     pressTrigger();
   });
   $('fire-btn').addEventListener('lostpointercapture', releaseTrigger);
   $('fire-btn').addEventListener('pointercancel',()=>{grenade.cancel();triggerHeld=triggerTap=false;});
   document.addEventListener('mousedown', (e) => {
+    if(mode==='play'&&(e.target===canvas||document.pointerLockElement===canvas))stopAutoPlay(false);
     if (
       e.button === 2 &&
       mode === 'play' &&
@@ -701,7 +738,7 @@ async function boot() {
   });
   document.addEventListener('pointerlockchange', () => {
     lookInput.clear(performance.now());
-    if (!document.pointerLockElement && mode === 'play' && !coarse && !dragFallback) pause();
+    if (!document.pointerLockElement && mode === 'play' && !pilot.enabled && !coarse && !dragFallback) pause();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pause();
@@ -709,6 +746,12 @@ async function boot() {
   });
   window.addEventListener('blur', pause);
   addEventListener('keydown', (e) => {
+    if(e.code==='KeyM'&&!e.repeat){e.preventDefault();if(mode==='autoplay')closeAutoPlay();else openAutoPlay();return;}
+    if(mode==='autoplay'){
+      if(e.code==='Escape'){e.preventDefault();closeAutoPlay();}return;
+    }
+    if(e.target instanceof HTMLInputElement)return;
+    if(mode==='play'&&/^(Key[WASDR]|Digit[1-5]|Space|ControlLeft|ControlRight|ShiftLeft|ShiftRight)$/.test(e.code))stopAutoPlay(false);
     if (
       [
         'KeyW',
@@ -730,7 +773,6 @@ async function boot() {
     )
       e.preventDefault();
     if (!e.repeat) {
-      if(e.code==='KeyJ') { if(mode==='challenges')closeChallenges();else openChallenges(); return; }
       if (e.code === 'KeyB') return openShop();
       if (e.code === 'Escape') {
         if (mode === 'challenges') closeChallenges();
@@ -743,7 +785,6 @@ async function boot() {
       if (e.code === 'Enter' && (mode==='ready'||mode==='pause') && document.activeElement?.tagName !== 'BUTTON')
         deploy();
       if (mode === 'play') {
-        if (e.code === 'KeyF') toggleAuto();
         if (e.code === 'Space') jump();
         if (e.code === 'KeyR') reload();
         if (e.code === 'Digit1') equip('rifle');
@@ -757,10 +798,11 @@ async function boot() {
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
   function look(dx, dy, sens, eventTime) {
+    if(Math.abs(dx)+Math.abs(dy)>0)stopAutoPlay(false);
     const now=performance.now();
     // Modern DOM timestamps use the performance time origin; handle older hosts.
     const time=eventTime>1e12?eventTime-performance.timeOrigin:eventTime??now;
-    if(lookInput.add(dx,dy,sens*T.MathUtils.lerp(1,.59,ads),time,now))steering=.2;
+    lookInput.add(dx,dy,sens*T.MathUtils.lerp(1,.59,ads),time,now);
   }
   function applyLook(now,frameMs) {
     const input=lookInput.take(now,frameMs),dx=input.rawX,dy=input.rawY;
@@ -768,7 +810,6 @@ async function boot() {
     player.pitch = T.MathUtils.clamp(player.pitch - input.y, -1.24, 1.24);
     swayX = T.MathUtils.clamp(swayX + dx * 0.0006, -0.055, 0.055);
     swayY = T.MathUtils.clamp(swayY + dy * 0.0004, -0.035, 0.035);
-    if (Math.abs(dx) + Math.abs(dy) > 1) steering = 0.2;
   }
   document.addEventListener('mousemove', (e) => {
     if (dragFallback && e.buttons & 2) rightDrag += Math.abs(e.movementX) + Math.abs(e.movementY);
@@ -785,6 +826,7 @@ async function boot() {
       lastY;
     el.addEventListener('pointerdown', (e) => {
       if (pointer !== null || mode !== 'play') return;
+      stopAutoPlay(false);
       pointer = e.pointerId;
       el.setPointerCapture(pointer);
       lastX = e.clientX;
@@ -838,14 +880,15 @@ async function boot() {
     return range>=(boss.bodyRadius??2.1)**2 || range>=(player.x-p.x)**2+(player.z-p.z)**2;
   }
   function movement(dt) {
-    const crouch = touchCrouch || keys.has('ControlLeft') || keys.has('ControlRight');
+    const control=pilot.enabled?pilot.controls:null;
+    const crouch = control?.crouch || touchCrouch || keys.has('ControlLeft') || keys.has('ControlRight');
     const previousHeight = bodyHeight;
     const { ceiling: standLimit } = world.verticalLimits(player.x, player.z, feet, bodyHeight);
     const low = crouch || feet + standingHeight > standLimit + bodyHeight + 0.002;
     const desiredHeight = low ? crouchedHeight : standingHeight;
     bodyHeight += T.MathUtils.clamp(desiredHeight - bodyHeight, -dt * 4.5, dt * 3.8);
     const running =
-      keys.has('ShiftLeft') || keys.has('ShiftRight') || Math.hypot(stick.x, stick.y) > 0.93;
+      control?.run || keys.has('ShiftLeft') || keys.has('ShiftRight') || Math.hypot(stick.x, stick.y) > 0.93;
     const pace = low ? 2.65 : running ? 7.9 : 5.25;
     if (grounded) airbornePace = jumpQueued && bodyHeight > 1.70 ? (running ? 7.9 : 5.25) : pace;
     if (jumpQueued && grounded) {
@@ -857,6 +900,7 @@ async function boot() {
     jumpQueued = false;
     let x = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + stick.x,
       z = Number(keys.has('KeyS')) - Number(keys.has('KeyW')) + stick.y;
+    if(control){const c=Math.cos(player.yaw),s=Math.sin(player.yaw);x=control.x*c-control.z*s;z=control.x*s+control.z*c;}
     const length = Math.hypot(x, z);
     moving = Math.min(1, length);
     x /= Math.max(1, length);
@@ -904,6 +948,7 @@ async function boot() {
     const desired=view.grenadeOrigin(camera,new T.Vector3());
     const contact=grenades.sweep(camera.position,desired,grenadeStats.radius);
     const origin=contact?contact.position.clone().addScaledVector(contact.normal,.002):desired;
+    if(pilot.enabled){const direction=pilot.launchDirection(origin,playerVelocity,power);if(direction)shotDirection.copy(direction);}
     const velocity=throwVelocity(shotDirection,power,playerVelocity);
     if(contact&&velocity.dot(contact.normal)<0)velocity.reflect(contact.normal).multiplyScalar(.4);
     grenades.launch(origin,velocity);economy.ammo.grenade--;
@@ -938,11 +983,11 @@ async function boot() {
     emit('grenade:explode',{position:position.toArray(),radius:grenadeStats.blastRadius,hits});
     sync();
   }
-  function fire(automatic = false) {
+  function fire() {
     if (mode!=='play'||!view.isReady()) return;
     if (economy.weapon === 'grenade') return;
     if (economy.weapon === 'knife') {
-      if (automatic || shotTime > 0) return;
+      if (shotTime > 0) return;
       shotTime = weapon().delay;
       meleeContact = weapon().contactTime;
       view.shoot();
@@ -955,15 +1000,13 @@ async function boot() {
       return;
     }
     camera.getWorldDirection(shotDirection);
-    if (automatic) {
-      if (!lock?.alive || !hunt.inSight(camera, lock, aim)) return;
-      shotDirection.subVectors(aim, camera.position).normalize();
-    }
+    if(pilot.enabled)shotDirection.subVectors(pilot.aim,camera.position).normalize();
     const hit = hunt.traceShot(camera.position, shotDirection);
-    if (automatic && !hit.enemy) return;
+    if(pilot.enabled&&hit.enemy!==pilot.target)return;
     const cost = economy.bet;
     economy.ammo[economy.weapon]--;
     economy.wallet -= cost;
+    pilot.recordShot();
     shotTime = weapon().delay - (economy.weapon === 'mg3' ? shotOverrun : 0);
     view.muzzleOrigin(camera, muzzle);
     view.shoot();
@@ -1005,18 +1048,17 @@ async function boot() {
     });
     if (e.hp <= 0) {
       if(e.boss) {
-        bossVictory={phase:'death',amount:e.type.reward,name:e.type.name,payout:null};
+        bossVictory={phase:'death',amount:e.type.reward,name:e.type.name,species:e.type.id,payout:null};
         warden.defeat();
         $('reward').textContent='BOSS 擊倒';rewardLeft=1.1;
       } else {
         hunt.kill(e);if(warden)supplies.drop(e);
         economy.wallet+=e.type.reward;
         rewardCoins.burst(prizeOrigin,Boolean(e.type.smallPrize));
-        $('reward').textContent='+ '+e.type.reward+' 賞金';rewardLeft=1.1;
+        rewardTags.push({species:e.type.id,name:e.type.name,amount:e.type.reward,tier:'silver'});
       }
       economy.kills++;
       lock = null;
-      scanLeft = 0;
       emit('target:kill', {
         species: e.type.id,
         position: e.root.position.toArray(),
@@ -1033,8 +1075,7 @@ async function boot() {
       economy.wallet += amount;
       if (e.boss) prizeOrigin.copy(position);
       rewardCoins.burst(prizeOrigin, false, prize);
-      $('reward').textContent = '小獎 +' + amount;
-      rewardLeft = 1.1;
+      rewardTags.push({species:e.type.id,name:e.type.name,amount,tier:'bronze'});
       emit('target:smallPrize', { species: e.type.id, amount, position: prizeOrigin.toArray() });
     }
   }
@@ -1054,8 +1095,6 @@ async function boot() {
     // Carry the fraction of a frame past a shot deadline during sustained belt fire.
     shotOverrun = shotTime > 0 ? Math.max(0, dt - shotTime) : 0;
     shotTime -= dt;
-    scanLeft -= dt;
-    steering -= dt;
     if (economy.weapon === 'grenade') {
       grenade.update(dt); lock=null; triggerHeld=triggerTap=false;
       return;
@@ -1068,6 +1107,16 @@ async function boot() {
         sync();
         emit('weapon:ready', { weapon: economy.weapon });
       }
+    }
+    if(pilot.enabled){
+      lock=pilot.target;
+      if(pilot.controls.fire&&pilot.refreshAim(autoContext())){
+        // Re-sample moving bones after the actor animation and player movement.
+        const delta=aim.subVectors(pilot.aim,camera.position).normalize();
+        camera.getWorldDirection(shotDirection);
+        if(delta.dot(shotDirection)>Math.cos(.065))fire();
+      }
+      return;
     }
     if (triggerTap || (triggerHeld && economy.weapon !== 'pistol')) fire();
     triggerTap = triggerTap && triggerHeld && !view.isReady();
@@ -1084,32 +1133,6 @@ async function boot() {
           emit('world:impact', { kind: hit.kind, position: hit.position.toArray() });
       }
     }
-    if (!autoFire || economy.weapon === 'knife') return;
-    if (scanLeft <= 0) {
-      lock = hunt.select(camera, lock);
-      scanLeft = 0.105;
-    }
-    if (!lock || !lock.alive) return;
-    hunt.aimPoint(lock, aim);
-    screen.copy(aim).project(camera);
-    if (Math.abs(screen.x) > 1 || Math.abs(screen.y) > 1 || screen.z > 1 || screen.z < -1) {
-      lock = null;
-      return;
-    }
-    const dx = aim.x - player.x,
-      dz = aim.z - player.z,
-      desiredYaw = Math.atan2(-dx, -dz);
-    const desiredPitch = Math.atan2(aim.y - camera.position.y, Math.hypot(dx, dz));
-    if (steering <= 0) {
-      const k = 1 - Math.exp(-5.8 * dt);
-      player.yaw +=
-        Math.atan2(Math.sin(desiredYaw - player.yaw), Math.cos(desiredYaw - player.yaw)) * k;
-      player.pitch += (desiredPitch - player.pitch) * k;
-      cameraPose();
-    }
-    screen.copy(aim).project(camera);
-    if (!reloadLeft && shotTime <= 0 && Math.hypot(screen.x * camera.aspect, screen.y) < 0.095)
-      fire(true);
   }
   const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const ticks = Array.from({ length: 13 }, () => {
@@ -1118,6 +1141,8 @@ async function boot() {
     return b;
   });
   function ui() {
+    $('autoplay-live').hidden=!pilot.enabled;
+    $('autoplay-status').textContent=pilot.status+' · '+pilot.shots+' 發';
     radar(hunt.targets);
     if(warden){
       const value=Math.ceil(100*Math.max(0,warden.target.hp)/warden.target.maxHp);
@@ -1146,7 +1171,7 @@ async function boot() {
           ? '換彈中'
           : lock
             ? '目標已鎖定'
-            : autoFire
+            : pilot.enabled
               ? '自動搜尋中'
               : '手動射擊';
     $('app').classList.toggle('locked', !!lock);
@@ -1182,11 +1207,28 @@ async function boot() {
     clock += dt;
     updateScope(dt);
     const playing = mode === 'play', simulating = playing && dt > 0;
+    rewardTags.update(playing ? real : 0);
     if (playing) {
       // Consume look input on EVERY rendered frame, including the impact pause.
       applyLook(performance.now(),real*1000);
     }
     if (simulating) {
+      if(pilot.enabled){
+        const control=pilot.update(dt,autoContext());
+        if(!pilot.enabled){stopInput();notice(pilot.status);}
+        else{
+          if(control.weapon)equip(control.weapon);
+          if(control.prime)pressTrigger();if(control.release)releaseTrigger();
+          if(control.jump)jumpQueued=true;
+          if(pilot.target||pilot.throwing){
+            const p=pilot.aim,dx=p.x-camera.position.x,dz=p.z-camera.position.z;
+            const yaw=Math.atan2(-dx,-dz),pitch=Math.atan2(p.y-camera.position.y,Math.hypot(dx,dz));
+            const turn=Math.atan2(Math.sin(yaw-player.yaw),Math.cos(yaw-player.yaw));
+            player.yaw+=T.MathUtils.clamp(turn*(1-Math.exp(-10*dt)),-dt*4.5,dt*4.5);
+            player.pitch=T.MathUtils.clamp(player.pitch+(pitch-player.pitch)*(1-Math.exp(-10*dt)),-1.24,1.24);
+          }
+        }
+      }
       previousPlayer.set(player.x,feet,player.z);
       supplyEffects.update(dt);
       const movementTime = Math.min(0.12, elapsed);
@@ -1208,7 +1250,7 @@ async function boot() {
       aimAndFire(dt);
       grenades.update(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
-      if (mag() === 0 && reloadLeft === 0) reload();
+      if (mag() === 0 && reloadLeft === 0 && !(pilot.enabled&&economy.weapon==='mg3')) reload();
       // The boss reward is a separate presentation; normal play and supplies continue.
       if(mode==='play')supplies?.update(dt,player,feet);
     }

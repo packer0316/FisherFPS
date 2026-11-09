@@ -31,10 +31,7 @@
         </div>
         <span class="header-rule"></span><span class="mode"><i></i> 殭屍獵場</span>
         <div class="top-actions">
-          <button id="boss-btn" title="BOSS 挑戰 (J)" aria-haspopup="dialog">BOSS 挑戰 <kbd>J</kbd></button>
-          <button id="auto-btn" aria-pressed="false" title="切換自動射擊 (F)">
-            <span id="auto-label">自動射擊：關</span><kbd>F</kbd>
-          </button>
+          <button id="autoplay-btn" title="自動遊玩設定 (M)" aria-haspopup="dialog">自動遊玩 <kbd>M</kbd></button>
           <button id="pause-btn" class="icon-button" aria-label="暫停獵殺">
             <i data-icon="pause"></i></button
           ><button id="shop-btn"><i data-icon="shop"></i><span>軍械商店</span><kbd>B</kbd></button
@@ -80,6 +77,8 @@
           <button id="deploy">
             <i data-icon="crosshair"></i><strong>進入獵場</strong><i data-icon="arrow"></i>
           </button>
+          <button id="pause-autoplay" hidden>自動遊玩設定 <kbd>M</kbd></button>
+          <button id="pause-boss" class="challenge-secondary" aria-haspopup="dialog" hidden>BOSS 挑戰</button>
           <button id="pause-home" class="challenge-secondary" hidden>回到首頁</button>
         </section>
         <div class="vitals">
@@ -121,6 +120,7 @@
           <button id="reload-btn" aria-label="換彈"><i data-icon="reload"></i></button>
         </div>
         <div id="toast" role="status"></div>
+        <div id="autoplay-live" hidden><span class="live-dot"></span><div><strong>自動遊玩中</strong><span id="autoplay-status"></span></div><button id="autoplay-stop">停止 · 手動接管</button></div>
       </main>
       <footer>
         <div><span class="live-dot"></span><b id="session-status">待命中</b></div>
@@ -184,7 +184,7 @@
       </div>
       <div id="boss-result" class="overlay" hidden>
         <section class="challenge-window result-window" role="dialog" aria-modal="true" aria-labelledby="result-title">
-          <div id="victory-art" hidden><div class="victory-halo"></div><img src="/castle/bride-victory.png" alt="鬼新娘" width="600" height="760"></div>
+          <div id="victory-art" hidden><div class="victory-halo"></div><img id="victory-portrait" alt="" width="600" height="760"></div>
           <h2 id="result-title" tabindex="-1"></h2>
           <div id="victory-score" hidden><span>本次 BOSS 賞金</span><strong id="victory-amount">1</strong><div class="victory-track"><i id="victory-progress"></i></div></div>
           <p id="result-detail" aria-live="polite"></p>
@@ -209,6 +209,22 @@
           </div>
           <div id="stock"></div>
           <button id="grant" hidden>領取補給金 +100</button>
+        </section>
+      </div>
+      <div id="autoplay-menu" class="overlay" hidden>
+        <section class="autoplay-window" role="dialog" aria-modal="true" aria-labelledby="autoplay-title" aria-describedby="autoplay-help">
+          <div class="auto-heading"><div><div class="auto-eyebrow">DUSTLINE / TACTICAL ASSIST</div><h2 id="autoplay-title">自動遊玩<span id="autoplay-scene"></span></h2></div><button id="autoplay-close" class="icon-button" aria-label="關閉自動遊玩設定">✕</button></div>
+          <div class="auto-layout">
+            <div><div class="auto-section-head"><h3>選擇優先目標</h3><div><button id="autoplay-all">全選</button><button id="autoplay-reset">重新選擇</button></div></div><p id="autoplay-help" class="auto-help">依點選順序鎖定。再點取消，重新點選排至最後。</p><div id="autoplay-roster"></div></div>
+            <aside class="auto-settings"><div class="auto-order-heading"><h3>攻擊優先順序</h3><span id="autoplay-count"></span></div><ol id="autoplay-order"></ol><p id="autoplay-empty">尚未選擇目標，請點選左側怪物。</p>
+              <h3>戰術設定</h3>
+              <label><input id="autoplay-grenades" type="checkbox" checked><span>自動投擲手榴彈<small>敵群聚集且彈道合適時投擲</small></span></label>
+              <label><input id="autoplay-supplies" type="checkbox" checked><span>拾取附近補給<small>優先使用機槍，耗盡切回步槍</small></span></label>
+              <label><input id="autoplay-limit" type="checkbox"><span>指定射擊發數後停止</span></label><div class="auto-limit-row"><input id="autoplay-shots" type="number" min="1" max="100000" step="1" value="300" disabled aria-label="射擊發數上限"><span>發</span></div>
+              <div class="auto-cost">目前 BET　<b id="autoplay-bet"></b><br>自動射擊依相同 BET 扣款。</div>
+            </aside>
+          </div>
+          <div class="auto-footer"><p>持續游擊走位 · 避開招式預警<br><kbd>M</kbd> 設定　<kbd>ESC</kbd> 暫停　移動或射擊可手動接管</p><div><button id="autoplay-cancel">返回</button><button id="autoplay-start">開始自動遊玩</button></div></div>
         </section>
       </div>
       <div id="loading">

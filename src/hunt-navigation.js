@@ -339,5 +339,5 @@ export function makeHuntNavigation(world) {
     if(n.stuck>.6&&!n.queued) {n.path.length=0;n.cursor=0;n.retry=0;request(actor,goal);}
     return 'idle';
   }
-  return {createState,reset,update,move,floorAt};
+  return {createState,reset,update,move,floorAt,request,canWalk};
 }

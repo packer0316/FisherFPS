@@ -1,4 +1,3 @@
-#boss-btn,
 .challenge-primary,
 .challenge-secondary {
   border: 1px solid #986b51;
@@ -9,7 +8,6 @@
   padding: 7px 11px;
   letter-spacing: 0.03em;
 }
-#boss-btn:hover,
 .challenge-primary:hover {
   background: #674435;
 }
@@ -184,15 +182,6 @@
     padding: 13px;
   }
 }
-@media (max-width: 760px) {
-  #boss-btn {
-    font-size: 11px;
-    padding: 6px;
-  }
-  #boss-btn kbd {
-    display: none;
-  }
-}
 @media (max-width: 940px) {
   .prison .location b {
     white-space: nowrap;
@@ -211,9 +200,6 @@
   header .top-actions {
     gap: 3px;
   }
-  #auto-btn {
-    white-space: nowrap;
-  }
 }
 @media (max-width: 359px) {
   header .brand b {
@@ -222,10 +208,6 @@
 }
 @media (max-width: 530px) {
   .prison #toast { top: 132px; bottom: auto; }
-  #boss-btn {
-    font-size: 10px;
-    white-space: nowrap;
-  }
   #shop-btn span {
     display: none;
   }

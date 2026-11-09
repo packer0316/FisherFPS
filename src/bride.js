@@ -260,6 +260,7 @@ export async function loadBride(scene,world,particles,groundImpact) {
     return {bigCoins,smallCoins,amount:bigCoins*5+smallCoins,floorY:0};
   }
   return {target,reset,update,stop,defeat,smallPrize,hit(){flash.value=.35;},
+    get hazards(){return hazards.pool;},
     heal(amount){if(hp<=0||state==='off'||!Number.isFinite(amount))return 0;const old=hp;hp=Math.min(100,hp+Math.max(0,amount));return hp-old;},
     bindHunt(value,cam){hunt=value;camera=cam;},
     get health(){return hp;},

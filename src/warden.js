@@ -384,6 +384,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
   }
   return {
     target,
+    get hazards(){return hazards.pool;},
     update,
     reset,
     hit,

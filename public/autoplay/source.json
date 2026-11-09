@@ -1,0 +1,79 @@
+{
+  "sourceProject": "TMDC_Zombie",
+  "atlas": "ClientCocos/ZombieResource/DinosaurExport/plist/Reward_common_Zombie.plist",
+  "portraits": {
+    "walker": {
+      "fishType": 10,
+      "frame": "Z_010_reward.png",
+      "size": [
+        183,
+        205
+      ],
+      "file": "walker.webp"
+    },
+    "stalker": {
+      "fishType": 11,
+      "frame": "Z_011_reward.png",
+      "size": [
+        145,
+        196
+      ],
+      "file": "stalker.webp"
+    },
+    "raider": {
+      "fishType": 14,
+      "frame": "Z_014_reward.png",
+      "size": [
+        222,
+        232
+      ],
+      "file": "raider.webp"
+    },
+    "mummy": {
+      "fishType": 19,
+      "frame": "Z_019_reward.png",
+      "size": [
+        192,
+        232
+      ],
+      "file": "mummy.webp"
+    },
+    "necromancer": {
+      "fishType": 21,
+      "frame": "Z_021_reward.png",
+      "size": [
+        176,
+        230
+      ],
+      "file": "necromancer.webp"
+    },
+    "bride": {
+      "fishType": 27,
+      "frame": "Z_027_reward.png",
+      "size": [
+        202,
+        218
+      ],
+      "file": "bride.webp"
+    },
+    "warden": {
+      "fishType": 29,
+      "frame": "Z_029_reward.png",
+      "size": [
+        216,
+        234
+      ],
+      "file": "warden.webp"
+    }
+  },
+  "victory": {
+    "warden": {
+      "frame": "Z_039_Prison_officer_reward.png",
+      "size": [
+        282,
+        401
+      ],
+      "file": "../prison/warden-victory.webp"
+    }
+  }
+}

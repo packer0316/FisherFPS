@@ -1,0 +1,69 @@
+#reward-tags {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+  /* Keep bursts below the header; older cards keep their own four-second clock. */
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+  isolation: isolate;
+}
+.reward-tag {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--tag-width);
+  height: calc(var(--tag-width) / 3);
+  transform-origin: 12% 50%;
+  overflow: hidden;
+  will-change: transform, opacity;
+  --tag-color: #d1dcdf;
+}
+.reward-tag.bronze { --tag-color: #f1b482; }
+.reward-tag.gold { --tag-color: #ffe39c; }
+.reward-tag-plate { position: absolute; inset: 0; width: 100%; height: 100%; }
+.reward-tag-portrait {
+  position: absolute;
+  left: 8%;
+  top: 13%;
+  width: 25%;
+  height: 74%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 5px #000a);
+}
+.reward-tag-name {
+  position: absolute;
+  top: 21%;
+  left: 36%;
+  right: 8%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff3de;
+  font-size: calc(var(--tag-width) * .032);
+  letter-spacing: .12em;
+  font-weight: 700;
+  text-shadow: 0 2px 3px #000;
+}
+.reward-tag-kind {
+  position: absolute;
+  bottom: 15%;
+  right: 8%;
+  color: var(--tag-color);
+  font-size: calc(var(--tag-width) * .023);
+  letter-spacing: .24em;
+}
+.reward-tag-number {
+  position: absolute;
+  left: 36%;
+  top: 34%;
+  width: 55.5%;
+  height: 43%;
+}
+.reward-tag-sheen {
+  position: absolute;
+  inset: 8% auto 8% 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, #fff6, transparent);
+  mix-blend-mode: screen;
+}
+#app:not(.playing) #reward-tags { visibility: hidden; }

@@ -740,26 +740,7 @@ footer span,
   font-size: 13px;
   letter-spacing: 2px;
 }
-#auto-btn {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  border: 1px solid #718174;
-  border-radius: 4px;
-  color: #dde6d9;
-  background: #26332c;
-  font-size: 12px;
-  font-weight: 700;
-}
-#auto-btn[aria-pressed='true'] {
-  color: var(--amber);
-  border-color: var(--amber);
-}
 @media (pointer: coarse) {
-  #auto-btn kbd {
-    display: none;
-  }
   .combat-btn {
     position: absolute;
     pointer-events: auto;
@@ -814,10 +795,6 @@ footer span,
   }
 }
 @media (max-width: 400px) {
-  #auto-btn {
-    font-size: 10px;
-    padding: 6px 4px;
-  }
   .top-actions {
     gap: 2px;
   }

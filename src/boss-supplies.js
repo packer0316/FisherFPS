@@ -223,7 +223,7 @@ export async function loadBossSupplies(scene, world, onPickup, particles) {
     }
   }
   function clear() { for (const slot of pool) release(slot); }
-  return { drop, update, clear };
+  return { drop, update, clear, get pickups(){return pool.filter(s=>s.state==='ready'||s.state==='warning');} };
 }
 
 // HUD state advances only with active gameplay time. No CSS animation clock
