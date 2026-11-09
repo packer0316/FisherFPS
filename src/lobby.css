@@ -24,7 +24,7 @@
 .bet-controls button:disabled {opacity:.35;cursor:default;}
 .bet-controls button:focus-visible,.bet-value input:focus-visible {outline:2px solid #edc180;outline-offset:3px;}
 .bet-value {display:flex;align-items:baseline;gap:6px;}
-.bet-value input {width:82px;min-width:0;padding:6px;border:1px solid #72797666;border-radius:3px;background:#0c1216;color:#f0e7d5;font:700 26px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;appearance:textfield;}
+.bet-value input {width:112px;min-width:0;padding:6px;border:1px solid #72797666;border-radius:3px;background:#0c1216;color:#f0e7d5;font:700 26px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;appearance:textfield;}
 .bet-value input::-webkit-inner-spin-button,.bet-value input::-webkit-outer-spin-button {-webkit-appearance:none;margin:0;}
 .bet-value span,.lobby-bet > small {font-size:10px;color:#a8b0b1;white-space:nowrap;}
 .lobby-card {

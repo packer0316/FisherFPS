@@ -1,4 +1,5 @@
 import { normalizePriority, togglePriority } from './auto-play-rules.js';
+import { captureRule,formatChance } from './rtp.js';
 
 export function makeAutoPlayUI({onStart,onClose}) {
   const $=id=>document.getElementById(id),overlay=$('autoplay-menu'),grid=$('autoplay-roster');
@@ -50,9 +51,11 @@ export function makeAutoPlayUI({onStart,onClose}) {
         const rank=document.createElement('span');rank.className='auto-rank';
         const img=document.createElement('img');img.alt='';img.width=256;img.height=256;
         img.src='/autoplay/'+t.id+'.webp';img.draggable=false;
-        const tag=document.createElement('small');tag.textContent=t.actor.boss?'BOSS':'獵場目標';
+        const rule=captureRule(t.id),tag=document.createElement('small');tag.textContent=(rule.tier==='boss'?'BOSS':rule.tier==='medium'?'中怪':'小怪')+' · '+rule.multiplier.toLocaleString('en-US')+' 倍';
         const name=document.createElement('strong');name.textContent=t.name;
-        card.append(img,rank,tag,name);card.onclick=()=>{order=togglePriority(order,t.id);draw();};return card;
+        const odds=document.createElement('small');odds.textContent=(bet*rule.multiplier).toLocaleString('en-US')+' 幣 · 擊倒 '+formatChance(rule.killChance);
+        card.title='每次命中獨立判定；'+(rule.bonusChance?'另有 '+formatChance(rule.bonusChance)+' 機率獲得 2 倍小獎。':'')+'BET 改變獎金，不改變機率。';
+        card.append(img,rank,tag,name,odds);card.onclick=()=>{order=togglePriority(order,t.id);draw();};return card;
       }));
       overlay.hidden=false;draw();$('autoplay-close').focus();
     },

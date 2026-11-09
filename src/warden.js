@@ -1,3 +1,4 @@
+import { bossEnraged } from './rtp.js';
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { frameClip } from './hunt.js';
@@ -123,7 +124,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     hitRadius: height * 0.99,
     chest: model.getObjectByName('Bip001_Spine1'),
     head: model.getObjectByName('Bip001_Head'),
-    type: { id: 'warden', name: '典獄長', reward: 400, smallPrizeChance: 0.06 },
+    type: { id: 'warden', name: '典獄長' },
     maxHp,
     hp: maxHp,
     alive: false,
@@ -183,7 +184,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     velocity.set(0, 0);
     hp = 100;
     for (const foot of footsteps) foot.raised = false;
-    target.hp = maxHp;
+    target.hp = maxHp; target.rage=0;target.hitCount=0;
     target.alive = false;
     target.opacity = 0;
     root.position.set(0, 0.018, -4.6);
@@ -200,7 +201,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
   function warn(player, contact) {
     warningStart = actions[current].time;
     contactTime = contact;
-    const enraged = target.hp <= maxHp / 2;
+    const enraged = bossEnraged(target);
     const lead = (contactTime - warningStart) * (enraged ? 0.97 : 0.9);
     const steps = Math.ceil(velocity.length() * lead / 0.65);
     aim.set(player.x, 0, player.z);
@@ -222,7 +223,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
   function startAttack(player) {
     const pattern = cycle++ % 3;
     circle = pattern === 2;
-    followUp = !circle && (pattern === 1 || target.hp <= maxHp / 2);
+    followUp = !circle && (pattern === 1 || bossEnraged(target));
     play(circle ? 'big_reward_in' : 'middle_reward');
     warn(player, circle ? actions.big_reward_in.getClip().duration : 1.5);
     if (!circle) particles.wardenFx('strike', effectMount);
@@ -309,7 +310,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       if (!target.alive) return startExit();
       state = 'roam';
       time = 0;
-      nextAttack = target.hp <= maxHp / 2 ? 0.55 : 1.15;
+      nextAttack = bossEnraged(target) ? 0.55 : 1.15;
       return;
     }
     const p = root.position,
@@ -321,7 +322,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
       Math.atan2(Math.sin(yaw - root.rotation.y), Math.cos(yaw - root.rotation.y)) *
       Math.min(1, dt * 3.8);
     if (d > 8.35) {
-      const step = Math.min(d - 8.35, (target.hp <= maxHp / 2 ? 3.2 : 2.7) * dt);
+      const step = Math.min(d - 8.35, (bossEnraged(target) ? 3.2 : 2.7) * dt);
       const nx = p.x + (step * vx) / d,
         nz = p.z + (step * vz) / d;
       if (!world.blocked(nx, p.z, 2.05, 0, height)) p.x = nx;
@@ -348,7 +349,7 @@ export async function loadWarden(scene, world, particles, groundImpact) {
     }
     const bigCoins = T.MathUtils.randInt(1, 3);
     const smallCoins = T.MathUtils.randInt(5, 7);
-    return { bigCoins, smallCoins, amount: bigCoins * 5 + smallCoins, floorY: target.groundY };
+    return { bigCoins, smallCoins, floorY: target.groundY };
   }
   function startExit() {
     state = 'dying';

@@ -19,7 +19,7 @@ output = Path(__file__).resolve().parents[1] / 'public' / 'autoplay'
 output.mkdir(parents=True, exist_ok=True)
 # FishDefine.lua establishes these FishType ids; the reward atlas uses the same ids.
 mapping = {'walker': 10, 'stalker': 11, 'raider': 14, 'mummy': 19,
-           'necromancer': 21, 'bride': 27, 'warden': 29}
+           'necromancer': 21, 'stationmaster': 23, 'bride': 27, 'warden': 29}
 numbers = lambda value: tuple(map(int, re.findall(r'-?\d+', value)))
 manifest = {'sourceProject': 'TMDC_Zombie', 'atlas': relative.as_posix(), 'portraits': {}}
 def extract(name):

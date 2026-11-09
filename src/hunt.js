@@ -14,7 +14,6 @@ const types = [
     name: '荒城行屍',
     height: 2.08,
     hp: 75,
-    reward: 24,
     walk: [10, 55],
     jump_down: [85, 100],
     stand_up: [100, 115],
@@ -26,21 +25,18 @@ const types = [
     name: '夜行獵手',
     height: 1.92,
     hp: 60,
-    reward: 22,
     walk: [90, 130],
     jump_down: [25, 40],
     stand_up: [40, 60],
     dead: [140, 182],
     rest: 100,
   },
-  { id: 'mummy', name: '古墓守衛', height: 2.35, hp: 125, reward: 45, smallPrize: 9, walk: [10, 124], rest: 10 },
+  { id: 'mummy', name: '古墓守衛', height: 2.35, hp: 125, walk: [10, 124], rest: 10 },
   {
     id: 'raider',
     name: '荒漠盜墓者',
     height: 2.12,
     hp: 95,
-    reward: 34,
-    smallPrize: 7,
     walk: [60, 150],
     jump_down: [315, 330],
     stand_up: [330, 345],
@@ -52,8 +48,6 @@ const types = [
     name: '死靈法師',
     height: 2.24,
     hp: 110,
-    reward: 39,
-    smallPrize: 8,
     walk: [300, 360],
     idle: [170, 290],
   },
@@ -344,6 +338,7 @@ export async function loadHunt(scene, world, boss = null) {
   }
 
   function maintainPopulation(dt, camera, wave) {
+    if(world.trainSpawns)return; // Station reinforcements leave an open, stopped train.
     refillIn -= dt;
     if (refillIn > 0) return;
     if (world.bossArena) {
@@ -367,7 +362,7 @@ export async function loadHunt(scene, world, boss = null) {
           nearby++;
           if (onScreen(camera, sightPoint)) inFront++;
         }
-      } else if (distance > farthest && !e.entry && !e.nav.chasing && e.unseen > 2 && e.hp === e.maxHp) {
+      } else if (distance > farthest && !e.entry && !e.nav.chasing && e.unseen > 2 && e.hp === e.maxHp && !e.hitCount) {
         donor = e;
         farthest = distance;
       }
@@ -454,7 +449,8 @@ export async function loadHunt(scene, world, boss = null) {
     e.root.scale.setScalar(1);
     e.root.rotation.set(0, Math.atan2(camera.position.x - spot.x, camera.position.z - spot.z), 0);
     e.holder.position.y = e.groundOffset;
-    e.hp = e.maxHp = e.type.hp + Math.min(60, (wave - 1) * 8);
+    e.hp = e.maxHp = e.type.hp;
+    e.hitCount=0;e.rage=0;
     e.alive = true;
     e.finished = false;
     e.visibleToPlayer = false;
@@ -491,6 +487,13 @@ export async function loadHunt(scene, world, boss = null) {
 
   function updateEntry(e, dt) {
     e.entryTime += dt;
+    if(e.entry==='train') {
+      const t=Math.min(1,e.entryTime/1.7);
+      e.root.position.lerpVectors(e.trainFrom,e.trainTo,t);
+      e.groundY=e.root.position.y;e.mixer.update(dt);
+      if(t===1){e.entry=null;navigation.reset(e);e.nav.chasing=true;e.home.copy(e.trainTo);}
+      return;
+    }
     if(e.entry==='gate'){
       const t=T.MathUtils.clamp((e.entryTime-.48)/1.85,0,1);
       e.root.position.x=e.gate.x+e.gate.side*(1.45-4.95*t);
@@ -788,6 +791,15 @@ export async function loadHunt(scene, world, boss = null) {
     e.command.goal.set(goal.x,navigation.floorAt(goal.x,goal.z,e.groundY),goal.z);
     return true;
   }
+  function disembark(from,to,camera) {
+    const e=enemies.find(actor=>actor.finished);if(!e)return null;
+    if(enemies.some(actor=>actor.alive&&actor.entry==='train'&&actor.root.position.distanceToSquared(from)<1))return null;
+    beginEntry(e,to,camera,1);
+    e.entry='train';e.entryTime=0;e.trainFrom=from.clone();e.trainTo=to.clone();
+    e.root.position.copy(from);e.groundY=from.y;e.root.rotation.y=Math.atan2(to.x-from.x,to.z-from.z);
+    e.mixer.stopAllAction();e.state='walk';e.actions.walk.reset().setEffectiveTimeScale(1.1).play();
+    setOpacity(e,1);e.root.visible=true;return e;
+  }
   function clearCommands(){for(const e of enemies)e.command.active=false;}
   let warmed=false;
   async function warmup(renderer,camera) {
@@ -806,7 +818,7 @@ export async function loadHunt(scene, world, boss = null) {
     await warmRender(renderer,scene,camera);
     warmed=true;
   }
-  return { enemies, targets, populate, update, kill, aimPoint, inSight, traceShot, summon, command, clearCommands,warmup,
+  return { enemies, targets, populate, update, kill, aimPoint, inSight, traceShot, summon, disembark, command, clearCommands,warmup,
     nodeAimPoint:targetNodePosition,
     canAimFrom(origin,e,out,index=0){
       if(!e.alive||e.opacity<.22)return false;

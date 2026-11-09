@@ -12,6 +12,7 @@ import { loadCombatParticles } from './combat-particles.js';
 import { loadHunt } from './hunt.js';
 import { loadRewardCoins } from './reward-coins.js';
 import { loadRewardTags } from './reward-tags.js';
+import { makeRefundNotice } from './refund-notice.js';
 import { makeBossPayout } from './boss-payout.js';
 import { loadBossSupplies, makeSupplyEffects } from './boss-supplies.js';
 import { $, gunIcon, makeRadar } from './ui.js';
@@ -23,6 +24,7 @@ import { grenadeStats, throwVelocity, blastDamage } from './grenade-physics.js';
 import { makeGrenadeProjectiles } from './grenade-projectiles.js';
 import { makeAutoPlayer } from './auto-play.js';
 import { makeAutoPlayUI } from './auto-play-ui.js';
+import { STARTING_WALLET,DEFAULT_BET,MIN_BET,MAX_BET,validBet,stepBet,captureRule,captureChance,formatChance,makePrizeRandom,resolveCaptureHit,makeRtpLedger } from './rtp.js';
 
 async function boot() {
   const canvas = $('world'),
@@ -54,18 +56,21 @@ async function boot() {
     loadRewardCoins(scene, world, camera, coarse),
     loadRewardTags($('hud')),
   ]);
+  const refunds=makeRefundNotice($('hud'));
   let fx = makeEffects(scene, particles.playBlood),
     radar = makeRadar(world, player);
   const desert={scene,world,hunt,rewardCoins,fx,radar};
   const levels=new Map(), loadingLevels=new Map();
   let fieldReturn, bossReturn='home', loadingChallenge=false, challengeId='warden';
+  const challengeIds=['warden','bride','stationmaster'];
   let warden=null, supplies=null;
   let bossVictory=null;
   const supplyEffects=makeSupplyEffects();
   const damageFeedback=makeDamageFeedback($('damage-overlay'));
   const economy = {
-    wallet: 100000,
-    bet: 10,
+    wallet: STARTING_WALLET,
+    bet: DEFAULT_BET,
+    rtp: makeRtpLedger(),
     kills: 0,
     wave: 1,
     owned: new Set([startingWeapon, 'pistol', 'knife', 'grenade']),
@@ -73,6 +78,7 @@ async function boot() {
     ammo: { grenade: grenadeStats.supply, ...Object.fromEntries(Object.entries(weapons).filter(([, w]) => w.mag).map(([id, w]) => [id, w.mag])) },
   };
   const grenade = makeGrenadeState(throwGrenade);
+  const prizeRandom=makePrizeRandom();
   const pilot=makeAutoPlayer(),pilotPosition=new T.Vector3();
   let autoReturn='pause';
   const autoUI=makeAutoPlayUI({onStart:startAutoPlay,onClose:closeAutoPlay});
@@ -114,7 +120,7 @@ async function boot() {
     $('scope-btn').setAttribute('aria-pressed', String(on));
   }
   function toggleScope() {
-    if (mode === 'play' && weapon().aimFov && reloadLeft <= 0) setScope(!scoped);
+    if (mode === 'play' && !world.playerLocked && weapon().aimFov && reloadLeft <= 0) setScope(!scoped);
   }
   function updateScope(dt) {
     const target = scoped && view.isReady() ? 1 : 0;
@@ -130,6 +136,7 @@ async function boot() {
   }
   let triggerHeld = false,
     triggerTap = false;
+  let transitLocked = false;
   const gravity = 9.81, standingHeight = 1.84, crouchedHeight = 1.23;
   let feet = world.terrainHeight(player.x, player.z),
     verticalSpeed = 0,
@@ -170,6 +177,7 @@ async function boot() {
     weapon = () => weapons[economy.weapon];
   function alignWallet() {
     rewardCoins.setWalletTarget($('wallet-anchor').getBoundingClientRect(), canvas.getBoundingClientRect());
+    refunds.align({left:$('wallet').parentElement.getBoundingClientRect().left,top:$('wallet').closest('.vitals').getBoundingClientRect().top});
     rewardTags.align($('wallet-anchor').closest('.vitals').getBoundingClientRect(), innerWidth,
       document.querySelector('header').getBoundingClientRect().bottom + 6);
   }
@@ -214,8 +222,8 @@ async function boot() {
     $('lobby-wallet').textContent=economy.wallet.toLocaleString('en-US');
     $('lobby-weapon').textContent=weapon().name;
     $('bet-amount').value = String(economy.bet);
-    $('bet-minus').disabled = economy.bet <= 1;
-    $('bet-plus').disabled = economy.bet >= 1000;
+    $('bet-minus').disabled = economy.bet <= MIN_BET;
+    $('bet-plus').disabled = economy.bet >= MAX_BET;
     $('kills').textContent = String(economy.kills).padStart(2, '0');
     $('wave').textContent = String(economy.wave).padStart(2, '0');
     const knife = economy.weapon === 'knife', throwable = economy.weapon === 'grenade', manual = knife || throwable;
@@ -225,7 +233,7 @@ async function boot() {
     $('reload-btn').hidden = manual;
     $('fire-btn').setAttribute('aria-label',throwable?'按住拔銷蓄力，放開投擲':'射擊');
     $('weapon-name').textContent = weapon().name;
-    $('cost').textContent = throwable ? '配發 5 顆 · 不扣金幣' : knife ? '近戰距離 2.5 公尺' : economy.bet + ' 幣 / 發';
+    $('cost').textContent = throwable ? '免費 5 顆 · 範圍機率擊倒' : knife ? '近戰清除 · 無賞金' : economy.bet.toLocaleString('en-US') + ' 幣 / 命中';
     $('scope-btn').hidden = !weapon().aimFov;
     const weaponIcon = $('weapon-icon');
     if (weaponIcon.dataset.weapon !== economy.weapon) {
@@ -248,6 +256,7 @@ async function boot() {
   function setMode(next) {
     if(next!=='play')stopAutoPlay(false);
     mode = next;
+    world.setActive?.(next==='play');
     if (next !== 'play' && next !== 'result') damageFeedback.clear();
     if (next !== 'play') setScope(false);
     stopInput();
@@ -260,7 +269,7 @@ async function boot() {
     $('pause-home').hidden=next!=='pause';
     $('pause-autoplay').hidden=next!=='pause';
     $('pause-boss').hidden=next!=='pause';
-    document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
+    document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.station?' 中央車站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     alignWallet();
     $('brief').hidden = next !== 'ready' && next !== 'pause';
     $('shop').hidden = next !== 'shop';
@@ -289,15 +298,16 @@ async function boot() {
     if(notify)notice('已停止自動遊玩，切換為手動操作');
   }
   function openAutoPlay(){
-    if(loadingChallenge||bossVictory||!['home','ready','pause','play'].includes(mode))return;
+    if(world.playerLocked||loadingChallenge||bossVictory||!['home','ready','pause','play'].includes(mode))return;
     autoReturn=mode;setMode('autoplay');
-    autoUI.open(hunt.roster,world.castle?'bride':warden?'warden':'desert',world.castle?'永夜古堡 · 冥婚大廳':warden?'C 區監獄中庭':'沙境獵場',economy.bet);
+    autoUI.open(hunt.roster,warden?challengeId:'desert',world.station?'中央車站 · 雙月台':world.castle?'永夜古堡 · 冥婚大廳':warden?'C 區監獄中庭':'沙境獵場',economy.bet);
   }
   function closeAutoPlay(){
     autoUI.close();
     if(autoReturn==='play')deploy();else setMode(autoReturn);
   }
   function startAutoPlay(config){
+    if(world.playerLocked)return;
     if(economy.wallet<economy.bet){notice('賞金不足，請回大廳調整 BET');return;}
     autoUI.close();setMode('play');cameraPose();
     pilot.start(config,autoContext());dragFallback=true;
@@ -335,7 +345,7 @@ async function boot() {
     if (!['home','ready','pause','play'].includes(mode)) return;
     bossReturn=mode;
     $('leave-prison').hidden=!warden;
-    for(const id of ['warden','bride'])$('start-'+id).textContent=warden&&challengeId===id?'重新挑戰　→':'進入挑戰　→';
+    for(const id of challengeIds)$('start-'+id).textContent=warden&&challengeId===id?'重新挑戰　→':'進入挑戰　→';
     setMode('challenges');
     $('challenge-'+challengeId).focus();
   }
@@ -346,25 +356,29 @@ async function boot() {
   }
   async function prepareChallenge(id) {
     if(levels.has(id))return levels.get(id);
-    const castle=id==='bride';
-    const [mapModule,bossModule]=await Promise.all(castle
+    const castle=id==='bride',station=id==='stationmaster';
+    const [mapModule,bossModule]=await Promise.all(station
+      ? [import('./station.js'),import('./stationmaster.js')]:castle
       ? [import('./castle.js'),import('./bride.js')]
       : [import('./prison.js'),import('./warden.js')]);
     const room=new T.Scene();
-    const arena=await (castle?mapModule.makeCastle:mapModule.makePrison)(room,coarse,desert.scene.environment);
+    const arena=await (station?mapModule.makeStation:castle?mapModule.makeCastle:mapModule.makePrison)(room,coarse,desert.scene.environment);
     const [boss,coins,drops]=await Promise.all([
-      (castle?bossModule.loadBride:bossModule.loadWarden)(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse),
+      (station?bossModule.loadStationmaster:castle?bossModule.loadBride:bossModule.loadWarden)(room,arena,particles,wardenImpact),loadRewardCoins(room,arena,camera,coarse),
       loadBossSupplies(room,arena,grantSupply,particles),
     ]);
     const crowd=await loadHunt(room,arena,boss.target);
     boss.bindHunt?.(crowd,camera);
+    arena.bindHunt?.(crowd,camera);
     const level={scene:room,world:arena,hunt:crowd,rewardCoins:coins,warden:boss,supplies:drops,
       fx:makeEffects(room,particles.playBlood,arena.rubble),radar:makeRadar(arena,player)};
     levels.set(id,level);return level;
   }
   function activateLevel(level,pose) {
     stopAutoPlay(false);
-    rewardTags.clear();
+    world.cancelTransit?.();transitLocked=false;$('train-warning').hidden=true;
+    world.setActive?.(false);
+    rewardTags.clear();refunds.clear();
     grenades.dispose();
     bossVictory=null;
     $('app').classList.remove('settling');
@@ -389,25 +403,26 @@ async function boot() {
     damageFeedback.clear();
     $('app').classList.toggle('prison',!!warden);
     $('app').classList.toggle('castle',!!world.castle);
+    $('app').classList.toggle('station',!!world.station);
     $('boss-name').textContent=warden?.target.type.name??'';
-    $('boss-health').setAttribute('aria-label',(warden?.target.type.name??'BOSS')+'血量');
-    $('radar-panel').querySelector('.location b').textContent=world.castle?'LA VEUVE':warden?'BLOCK C':'SECTOR 01';
-    $('brief').querySelector('.operation').lastChild.textContent=world.castle?' LA VEUVE':warden?' BLOCK C':' DUST BAZAAR';
-    $('brief').querySelector('p').textContent=world.castle?'留意詛咒預警：離開紅紫色範圍，穿過空隙。鬼新娘會召喚亡者並驅使衝鋒。':warden?'典獄長會預判跑位。紅線出現後變向，留意重擊後的第二道紅線。':'瞄準獵物開火，擊倒領賞。擊中牆面會退還該發費用。';
-    document.querySelector('header .mode').lastChild.textContent=world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
+    $('boss-health').setAttribute('aria-label',(warden?.target.type.name??'BOSS')+'賞金與怒氣');
+    $('radar-panel').querySelector('.location b').textContent=world.station?'TERMINAL':world.castle?'LA VEUVE':warden?'BLOCK C':'SECTOR 01';
+    $('brief').querySelector('.operation').lastChild.textContent=world.station?' LAST DEPARTURE':world.castle?' LA VEUVE':warden?' BLOCK C':' DUST BAZAAR';
+    $('brief').querySelector('p').textContent=world.station?'軌道與兩側月台都可行走，留意行進中的列車，碰撞會將你撞回月台。開門時可從兩側進出車廂，發車前會引導車內玩家下車。善用樓梯與二樓平台躲避站長招式。':world.castle?'留意詛咒預警：離開紅紫色範圍，穿過空隙。鬼新娘會召喚亡者並驅使衝鋒。':warden?'典獄長會預判跑位。紅線出現後變向，留意重擊後的第二道紅線。':'瞄準獵物開火，擊倒領賞。沒有命中怪物會全額退款。';
+    document.querySelector('header .mode').lastChild.textContent=world.station?' 中央車站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     shadowLeft=0;renderer.shadowMap.needsUpdate=true;cameraPose();alignWallet();
   }
   async function enterChallenge(id=challengeId) {
     if(loadingChallenge)return;
     loadingChallenge=true;
-    for(const key of ['warden','bride'])$('challenge-'+key).disabled=true;
-    $('start-'+id).textContent=id==='bride'?'載入古堡中…':'載入監獄中…';
+    for(const key of challengeIds)$('challenge-'+key).disabled=true;
+    $('start-'+id).textContent=id==='stationmaster'?'載入車站中…':id==='bride'?'載入古堡中…':'載入監獄中…';
     try {
       if(!loadingLevels.has(id))loadingLevels.set(id,prepareChallenge(id).catch(error=>{loadingLevels.delete(id);throw error;}));
       const level=await loadingLevels.get(id);
       if(!warden)fieldReturn={player:{...player},feet,kills:economy.kills,wave:economy.wave,mode:bossReturn};
       settleBossOnLeave();warden?.stop();fx.clear();rewardCoins.clear();challengeId=id;
-      activateLevel(level,{player:{x:0,z:id==='bride'?20:16.5,yaw:0,pitch:id==='bride' ? .04 : .12},feet:0});
+      activateLevel(level,{player:level.world.spawn??{x:0,z:id==='bride'?20:16.5,yaw:0,pitch:id==='bride' ? .04 : .12},feet:0});
       economy.kills=0;economy.wave=1;fx.clear();rewardCoins.clear();
       hunt.populate(camera);warden.reset();sync();ui();
       await hunt.warmup(renderer,camera);
@@ -416,11 +431,11 @@ async function boot() {
       await deploy();
     }catch(error){
       console.error(error);$('start-'+id).textContent='載入失敗，點此重試';
-    }finally{loadingChallenge=false;for(const key of ['warden','bride'])$('challenge-'+key).disabled=false;}
+    }finally{loadingChallenge=false;for(const key of challengeIds)$('challenge-'+key).disabled=false;}
   }
   function goHome(){
     if(loadingChallenge)return;
-    rewardTags.clear();
+    rewardTags.clear();refunds.clear();
     settleBossOnLeave();
     warden?.stop();fx.clear();rewardCoins.clear();supplies?.clear();supplyEffects.clear();particles.clearWorld();
     if(warden) {
@@ -451,10 +466,17 @@ async function boot() {
     if(bossVictory?.phase!=='death')return;
     stopAutoPlay(false);
     const target=warden.target,origin=target.root.position.clone();origin.y=target.groundY;
-    const portrait=$('victory-portrait'),prisonBoss=bossVictory.species==='warden';
-    portrait.src=prisonBoss?'/prison/warden-victory.webp':'/castle/bride-victory.png';
-    portrait.alt=bossVictory.name;portrait.width=prisonBoss?282:600;portrait.height=prisonBoss?401:760;
+    const portrait=$('victory-portrait'),prisonBoss=bossVictory.species==='warden',stationBoss=bossVictory.species==='stationmaster';
+    portrait.src=stationBoss?'/autoplay/stationmaster.webp':prisonBoss?'/prison/warden-victory.webp':'/castle/bride-victory.png';
+    portrait.alt=bossVictory.name;portrait.width=stationBoss?256:prisonBoss?282:600;portrait.height=stationBoss?256:prisonBoss?401:760;
     warden.stop();hunt.clearCommands?.();
+    if(bossVictory.amount===0){
+      bossVictory.phase='complete';$('boss-result').classList.add('victory');
+      $('victory-art').hidden=$('victory-score').hidden=false;
+      $('result-title').textContent=bossVictory.name+'已清除';$('result-detail').textContent='戰鬥刀清除不發賞金';
+      $('victory-amount').textContent='0';$('victory-progress').style.width='100%';$('victory-home').hidden=false;
+      $('retry-warden').disabled=$('result-leave').disabled=false;refreshVictoryOverlay();return;
+    }
     const plan=rewardCoins.burstBoss(origin,bossVictory.amount);
     bossVictory.payout=makeBossPayout(plan.amount,plan.count);
     bossVictory.phase='scatter';
@@ -519,7 +541,7 @@ async function boot() {
     bossVictory.flushed=true;
   }
   $('pause-boss').onclick=openChallenges;$('close-boss').onclick=closeChallenges;
-  for(const id of ['warden','bride'])$('challenge-'+id).onclick=()=>enterChallenge(id);
+  for(const id of challengeIds)$('challenge-'+id).onclick=()=>enterChallenge(id);
   $('retry-warden').onclick=()=>enterChallenge();
   $('leave-prison').onclick=$('result-leave').onclick=leavePrison;
   $('victory-home').onclick=$('pause-home').onclick=goHome;
@@ -527,6 +549,7 @@ async function boot() {
   $('mode-boss').onclick=openChallenges;
   $('boss-menu').onclick=e=>{if(e.target===$('boss-menu'))closeChallenges();};
   function equip(id) {
+    if(mode==='play'&&world.playerLocked)return;
     if (!economy.owned.has(id)) {
       notice('可在軍械商店購買' + weapons[id].name);
       return;
@@ -594,9 +617,7 @@ async function boot() {
           (id === startingWeapon ? ' · 初始配發' : '') +
           (id === 'grenade' ? ' · 剩餘 ' + economy.ammo.grenade + ' / 5 顆' : id === 'knife' ? ' · 配發' : ' · ' + w.mag + (id === 'mg3' ? ' 發彈箱' : ' 發彈匣')) +
           '</small><span class="spec">' +
-          w.damage +
-          ' 傷害　/　' +
-          (id === 'grenade' ? '範圍爆炸 · 不扣金幣' : id === 'knife' ? '近戰 2.5 公尺' : economy.bet + ' 幣每發') +
+          (id === 'grenade' ? '範圍機率擊倒 · 免費賞金' : id === 'knife' ? w.damage+' 近戰傷害 · 清怪不發幣' : economy.bet.toLocaleString('en-US')+' 幣 / 命中 · 打空退款') +
           '</span></div><button data-buy="' +
           id +
           '" ' +
@@ -610,6 +631,7 @@ async function boot() {
     $('grant').hidden = economy.wallet >= 2;
   }
   function openShop() {
+    if(world.playerLocked)return;
     if (mode === 'challenges' || mode === 'result') return;
     if (mode === 'shop') return closeShop();
     shopReturn = mode;
@@ -625,13 +647,13 @@ async function boot() {
   function setBet(value) {
     if (mode !== 'home') return;
     const amount = Number(value);
-    if (String(value).trim() && Number.isInteger(amount) && amount >= 1 && amount <= 1000) {
+    if (String(value).trim() && validBet(amount)) {
       economy.bet = amount;
-    } else notice('BET 請輸入 1–1,000 的整數');
+    } else notice('BET 請輸入 1–1,000,000 的整數');
     sync();
   }
-  $('bet-minus').onclick = () => setBet(economy.bet - 1);
-  $('bet-plus').onclick = () => setBet(economy.bet + 1);
+  $('bet-minus').onclick = () => setBet(stepBet(economy.bet,-1));
+  $('bet-plus').onclick = () => setBet(stepBet(economy.bet,1));
   $('bet-amount').onchange = (e) => setBet(e.target.value);
   $('bet-amount').addEventListener('keydown', (e) => {
     e.stopPropagation();
@@ -671,7 +693,7 @@ async function boot() {
     }
   };
   function reload() {
-    if (mode !== 'play' || !weapon().mag || reloadLeft > 0 || !view.isReady()) return;
+    if (mode !== 'play' || world.playerLocked || !weapon().mag || reloadLeft > 0 || !view.isReady()) return;
     setScope(false);
     reloadEmpty = mag() === 0;
     reloadDuration = weapon().reload * (reloadEmpty ? 1 : 0.86);
@@ -679,10 +701,10 @@ async function boot() {
     emit('weapon:reload', { weapon: economy.weapon });
   }
   function jump() {
-    if (mode === 'play' && grounded) jumpQueued = true;
+    if (mode === 'play' && !world.playerLocked && grounded) jumpQueued = true;
   }
   function pressTrigger() {
-    if (mode !== 'play') return;
+    if (mode !== 'play' || world.playerLocked) return;
     if (economy.weapon === 'grenade') {
       if (!view.isReady()) return;
       if (!mag()) { notice('手榴彈已用完'); return; }
@@ -699,7 +721,7 @@ async function boot() {
   $('scope-btn').onclick = toggleScope;
   $('jump-btn').onpointerdown = jump;
   $('crouch-btn').onpointerdown = () => {
-    if (mode !== 'play') return;
+    if (mode !== 'play' || world.playerLocked) return;
     touchCrouch = !touchCrouch;
     $('crouch-btn').setAttribute('aria-pressed', String(touchCrouch));
   };
@@ -746,6 +768,7 @@ async function boot() {
   });
   window.addEventListener('blur', pause);
   addEventListener('keydown', (e) => {
+    if(mode==='play'&&world.playerLocked&&e.code!=='Escape'){e.preventDefault();return;}
     if(e.code==='KeyM'&&!e.repeat){e.preventDefault();if(mode==='autoplay')closeAutoPlay();else openAutoPlay();return;}
     if(mode==='autoplay'){
       if(e.code==='Escape'){e.preventDefault();closeAutoPlay();}return;
@@ -798,6 +821,7 @@ async function boot() {
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
   function look(dx, dy, sens, eventTime) {
+    if(world.playerLocked)return;
     if(Math.abs(dx)+Math.abs(dy)>0)stopAutoPlay(false);
     const now=performance.now();
     // Modern DOM timestamps use the performance time origin; handle older hosts.
@@ -825,7 +849,7 @@ async function boot() {
       lastX,
       lastY;
     el.addEventListener('pointerdown', (e) => {
-      if (pointer !== null || mode !== 'play') return;
+      if (pointer !== null || mode !== 'play' || world.playerLocked) return;
       stopAutoPlay(false);
       pointer = e.pointerId;
       el.setPointerCapture(pointer);
@@ -872,6 +896,7 @@ async function boot() {
     },
   );
   function passable(x,z,stepHeight) {
+    if(pilot.enabled&&world.autoPlayStep&&!world.autoPlayStep({x:player.x,z:player.z,y:feet},x,z,world.verticalLimits(x,z,feet,bodyHeight).floor,.32))return false;
     if(world.blocked(x,z,.32,feet,bodyHeight,stepHeight))return false;
     const boss=warden?.target;
     if(!boss?.alive)return true;
@@ -951,14 +976,14 @@ async function boot() {
     if(pilot.enabled){const direction=pilot.launchDirection(origin,playerVelocity,power);if(direction)shotDirection.copy(direction);}
     const velocity=throwVelocity(shotDirection,power,playerVelocity);
     if(contact&&velocity.dot(contact.normal)<0)velocity.reflect(contact.normal).multiplyScalar(.4);
-    grenades.launch(origin,velocity);economy.ammo.grenade--;
+    grenades.launch(origin,velocity,{bet:economy.bet});economy.ammo.grenade--;
     emit('weapon:throw',{weapon:'grenade',origin:origin.toArray(),velocity:velocity.toArray(),power,remaining:economy.ammo.grenade,cost:0});
     sync();
   }
   function grenadeBounce(position,speed) {
     emit('grenade:bounce',{position:position.toArray(),speed});
   }
-  function explodeGrenade(position) {
+  function explodeGrenade(position,context={bet:economy.bet}) {
     particles.playGrenade(position);
     let hits=0;
     for(const enemy of hunt.targets){
@@ -968,7 +993,7 @@ async function boot() {
       const damage=blastDamage(distance);
       if(!damage||!grenades.visible(position,target))continue;
       particles.playBlood(target,target.clone().sub(position).normalize(),enemy);
-      damageEnemy(enemy,target,damage);hits++;
+      damageEnemy(enemy,target,damage,{source:'grenade',bet:context.bet,strength:damage/grenadeStats.damage});hits++;
     }
     if(!reducedMotion.matches){
       const distance=position.distanceTo(camera.position);
@@ -1020,63 +1045,62 @@ async function boot() {
       target: hit.position.toArray(),
       cost,
     });
-    if (hit.enemy) damageEnemy(hit.enemy, hit.position);
-    else if (hit.kind !== 'air') {
-      emit('world:impact', { kind: hit.kind, position: hit.position.toArray() });
-      if (hit.kind === 'wall') {
-        economy.wallet += cost;
-        $('reward').textContent = '牆面退款 +' + cost;
-        rewardLeft = 0.7;
-        emit('wallet:refund', { amount: cost, weapon: economy.weapon });
-      }
+    if (hit.enemy?.alive) damageEnemy(hit.enemy, hit.position,weapon().damage,{source:'shot',bet:cost});
+    else {
+      if(hit.kind!=='air')emit('world:impact', { kind: hit.kind, position: hit.position.toArray() });
+      economy.wallet += cost;economy.rtp.refund(cost);
+      refunds.push(cost);
+      emit('wallet:refund', { amount: cost, weapon: economy.weapon,reason:hit.kind });
     }
     sync();
     if (economy.wallet < economy.bet) notice('賞金不足，可回大廳調低 BET 或按 B 開啟商店整備');
   }
   const prizeOrigin = new T.Vector3();
-  function damageEnemy(e, position, damage = weapon().damage) {
-    if (!e.alive) return;
+  function damageEnemy(e, position, damage = weapon().damage, context={source:'knife',bet:economy.bet}) {
+    const result=resolveCaptureHit(e,{...context,damage},prizeRandom);
+    if(!result)return;
+    economy.rtp.record(result);
+    emit('rtp:round',{species:e.type.id,...result});
     flashLeft = 0.13;
-    e.hp -= damage;
     prizeOrigin.set(e.root.position.x, e.groundY, e.root.position.z);
     if(e.boss)warden.hit();
     else e.root.rotation.z = (Math.random() > 0.5 ? 1 : -1) * 0.11;
     emit('target:hit', {
       species: e.type.id,
       position: position.toArray(),
-      damage,
+      damage:context.source==='knife'?damage:0,source:result.source,killed:result.killed,
     });
-    if (e.hp <= 0) {
+    if (result.killed) {
       if(e.boss) {
-        bossVictory={phase:'death',amount:e.type.reward,name:e.type.name,species:e.type.id,payout:null};
+        bossVictory={phase:'death',amount:result.amount,name:e.type.name,species:e.type.id,payout:null};
         warden.defeat();
         $('reward').textContent='BOSS 擊倒';rewardLeft=1.1;
       } else {
         hunt.kill(e);if(warden)supplies.drop(e);
-        economy.wallet+=e.type.reward;
-        rewardCoins.burst(prizeOrigin,Boolean(e.type.smallPrize));
-        rewardTags.push({species:e.type.id,name:e.type.name,amount:e.type.reward,tier:'silver'});
+        economy.wallet+=result.amount;
+        if(result.amount>0){rewardCoins.burst(prizeOrigin,captureRule(e.type.id).tier==='medium');
+          rewardTags.push({species:e.type.id,name:e.type.name,amount:result.amount,tier:'silver'});}
       }
       economy.kills++;
       lock = null;
       emit('target:kill', {
         species: e.type.id,
         position: e.root.position.toArray(),
-        reward: e.type.reward,
+        reward: result.amount,source:result.source,
       });
       if (!warden && economy.kills % hunt.enemies.length === 0) {
         economy.wave++;
         notice('獵殺進入第 ' + economy.wave + ' 波');
         emit('hunt:wave', { wave: economy.wave });
       }
-    } else if ((e.boss || e.type.smallPrize) && Math.random() < (e.type.smallPrizeChance ?? 0.20)) {
-      const prize = e.boss ? warden.smallPrize(position) : undefined;
-      const amount = prize?.amount ?? e.type.smallPrize;
+    } else if (result.kind==='bonus') {
+      const prize = e.boss ? warden.smallPrize(position) : {bigCoins:1,smallCoins:5};
+      const amount = result.amount;
       economy.wallet += amount;
       if (e.boss) prizeOrigin.copy(position);
       rewardCoins.burst(prizeOrigin, false, prize);
       rewardTags.push({species:e.type.id,name:e.type.name,amount,tier:'bronze'});
-      emit('target:smallPrize', { species: e.type.id, amount, position: prizeOrigin.toArray() });
+      emit('target:smallPrize', { species: e.type.id, amount, position: prizeOrigin.toArray(),source:result.source });
     }
   }
   const knifeRay = new T.Vector3();
@@ -1145,8 +1169,12 @@ async function boot() {
     $('autoplay-status').textContent=pilot.status+' · '+pilot.shots+' 發';
     radar(hunt.targets);
     if(warden){
-      const value=Math.ceil(100*Math.max(0,warden.target.hp)/warden.target.maxHp);
-      $('boss-percent').textContent=value+'%';$('boss-fill').style.width=value+'%';
+      const rule=captureRule(warden.target.type.id),value=Math.min(100,Math.floor(100*(warden.target.rage??0)/rule.enrageHits));
+      const knife=economy.weapon==='knife';
+      $('boss-percent').textContent=knife?'近戰':formatChance(captureChance(rule.id,economy.weapon==='grenade'?'grenade':'shot'));
+      $('boss-percent').title=knife?'近戰清除，無賞金':economy.weapon==='grenade'?'爆心擊倒率，隨距離降低':'每次付費命中的擊倒率';
+      $('boss-fill').style.width=value+'%';$('boss-rage').textContent='怒氣 '+value+'%';
+      $('boss-prize').textContent=knife?'近戰清除 · 無賞金':'賞金 '+(economy.bet*rule.multiplier).toLocaleString('en-US');
       $('boss-cue').textContent=warden.cue();$('health-value').textContent=warden.health;
     }
     $('location').textContent = world.district(player.x, player.z, feet);
@@ -1184,7 +1212,10 @@ async function boot() {
       el.style.display = 'block';
       el.style.left = (screen.x * 0.5 + 0.5) * innerWidth + 'px';
       el.style.top = (-screen.y * 0.5 + 0.5) * innerHeight + 'px';
+      const knife=economy.weapon==='knife',rule=captureRule(lock.type.id),source=economy.weapon==='grenade'?'grenade':'shot';
       $('enemy-name').textContent = lock.type.name;
+      $('enemy-prize').textContent=knife?'近戰清除 · 無賞金':(economy.bet*rule.multiplier).toLocaleString('en-US')+' 幣 · '+(source==='grenade'?'爆心':'每發')+'擊倒 '+formatChance(captureChance(rule.id,source));
+      $('enemy-health').parentElement.hidden=!knife;
       $('enemy-health').style.width = (100 * lock.hp) / lock.maxHp + '%';
     }
   }
@@ -1207,13 +1238,22 @@ async function boot() {
     clock += dt;
     updateScope(dt);
     const playing = mode === 'play', simulating = playing && dt > 0;
+    const forced=simulating?world.updatePlayer?.(dt,player,feet,bodyHeight):null;
+    const controlsLocked=!!world.playerLocked||!!forced;
+    if(controlsLocked!==transitLocked){
+      if(controlsLocked){stopAutoPlay(false);setScope(false);damageFeedback.clear();}
+      stopInput();transitLocked=controlsLocked;
+    }
+    if(forced){feet=forced.feet;verticalSpeed=stepOffset=landingTime=landingDip=0;grounded=true;moving=0;}
+    if(forced?.impactStart){tremor=Math.max(tremor,1.45);tremorTime=0;tremorDecay=4.8;tremorSide=player.x>0?1:-1;}
     rewardTags.update(playing ? real : 0);
-    if (playing) {
+    refunds.update(playing ? real : 0);
+    if (playing&&!controlsLocked) {
       // Consume look input on EVERY rendered frame, including the impact pause.
       applyLook(performance.now(),real*1000);
     }
     if (simulating) {
-      if(pilot.enabled){
+      if(pilot.enabled&&!controlsLocked){
         const control=pilot.update(dt,autoContext());
         if(!pilot.enabled){stopInput();notice(pilot.status);}
         else{
@@ -1233,7 +1273,7 @@ async function boot() {
       supplyEffects.update(dt);
       const movementTime = Math.min(0.12, elapsed);
       const steps = Math.ceil(movementTime * 120);
-      for (let i = 0; i < steps; i++) movement(movementTime / steps);
+      if(!controlsLocked)for (let i = 0; i < steps; i++) movement(movementTime / steps);
       playerVelocity.set(player.x,feet,player.z).sub(previousPlayer).divideScalar(movementTime);
       kickPitch *= Math.exp(-dt * 12);
       kickYaw *= Math.exp(-dt * 14);
@@ -1243,18 +1283,30 @@ async function boot() {
     if (playing) cameraPose();
     if (simulating || mode === 'ready') {
       world.breeze.value += dt;
-      if(playing && warden)world.updateGates?.(dt);
+      if(playing && warden)world.updateGates?.(dt,player,feet,bodyHeight);
       hunt.update(dt, clock, playing, camera, economy.wave, feet);
     }
     if (simulating) {
-      aimAndFire(dt);
+      if(!controlsLocked&&!world.playerLocked)aimAndFire(dt);
       grenades.update(dt);
       // Covers the last shot and an empty gun drawn after its previous reload was interrupted.
       if (mag() === 0 && reloadLeft === 0 && !(pilot.enabled&&economy.weapon==='mg3')) reload();
       // The boss reward is a separate presentation; normal play and supplies continue.
       if(mode==='play')supplies?.update(dt,player,feet);
     }
-    if(warden&&mode==='play'&&simulating)warden.update(dt,player,playerHit,()=>finishChallenge(true));
+    if(warden&&mode==='play'&&simulating)warden.update(dt,player,playerHit,()=>finishChallenge(true),feet);
+    if(forced&&!world.playerLocked){stopInput();transitLocked=false;}
+    $('train-warning').hidden=!(playing&&world.playerLocked);
+    if(world.playerLocked){
+      const warning=$('train-warning'),impact=world.transitKind==='impact',kind=impact?'impact':'evacuation';
+      if(warning.dataset.kind!==kind){
+        warning.dataset.kind=kind;
+        warning.querySelector('small').textContent=impact?'軌道危險':'月台安全警告';
+        warning.querySelector('strong').textContent=impact?'遭列車撞擊！正在回到月台':'列車即將啟動，請離開車廂';
+        warning.querySelector('span').textContent=impact?'站穩後恢復操控，留意進站列車':'正在引導你返回月台，抵達後恢復操控';
+      }
+      warning.querySelector('i').style.width=(world.evacuationProgress*100).toFixed(1)+'%';
+    }
     fx.update(simulating ? dt : 0);
     if (simulating) {
       rewardCoins.update(dt, particles.playCoinPickup, creditBossCoin);
@@ -1284,6 +1336,7 @@ async function boot() {
     }
     // The lobby uses static scene artwork; do not render the full 3D world behind menus.
     if(atHome)return;
+    world.updateVisuals?.(uiDt,camera);
     renderer.clear();
     renderer.render(scene, camera);
     particles.render(camera);

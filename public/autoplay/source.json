@@ -47,6 +47,15 @@
       ],
       "file": "necromancer.webp"
     },
+    "stationmaster": {
+      "fishType": 23,
+      "frame": "Z_023_reward.png",
+      "size": [
+        222,
+        198
+      ],
+      "file": "stationmaster.webp"
+    },
     "bride": {
       "fishType": 27,
       "frame": "Z_027_reward.png",

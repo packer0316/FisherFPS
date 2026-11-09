@@ -198,6 +198,22 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     for(const s of brideSlots){s.handle?.stop();s.handle=null;s.anchor=null;}
     brideVisible=false;
   }
+  const stationSlots=slots(8),stationSpecs={intro:['Z_021_ingame',5],strike:['Z_021_middle_reward',3],
+    burst:['Z_021_big_reward',4.5],out:['Z_021_out',4],bell:['Z_021_train_come',4]};
+  let stationAssets,loadingStation,stationVisible=false;
+  function loadStation(){
+    loadingStation??=Promise.all(Object.entries(stationSpecs).map(async([key,[file]])=>
+      [key,await load(world,'/station/fx/'+file+'.efk',1)]))
+      .then(entries=>{stationAssets=Object.fromEntries(entries);renderer.resetState();})
+      .catch(error=>{loadingStation=null;throw error;});return loadingStation;
+  }
+  function stationFx(name,anchor){
+    if(!stationAssets)return;const slot=stationSlots.find(s=>!s.handle)??stationSlots.reduce((a,b)=>a.age>b.age?a:b);
+    slot.handle?.stop();anchor.updateWorldMatrix(true,false);slot.handle=world.play(stationAssets[name],0,0,0);
+    slot.handle?.setMatrix(anchor.matrixWorld.elements);slot.anchor=anchor;slot.age=0;slot.life=stationSpecs[name][1];
+    if(slot.handle)stationVisible=true;
+  }
+  function stopStation(){for(const s of stationSlots){s.handle?.stop();s.handle=null;s.anchor=null;}stationVisible=false;}
   // CC0 Effekseer materials, loaded once for boss arenas. Fixed handles prevent
   // a multi-segment fissure from growing the native particle arena unboundedly.
   const bossSlots=slots(6);
@@ -286,13 +302,17 @@ export async function loadCombatParticles(renderer, walletCanvas) {
       const slot=supplySlots[i];
       if(slot.anchor)supplyFx(i,slot.anchor,slot.alpha);
     }
-    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible || stationVisible) {
       updateGrenades(dt);
       if (officerVisible) syncWardenEffects();
       if(brideVisible)for(const slot of brideSlots)if(slot.handle&&slot.anchor) {
         slot.anchor.updateWorldMatrix(true,false);slot.handle.setMatrix(slot.anchor.matrixWorld.elements);
       }
       brideVisible=advance(brideSlots,dt,1);
+      if(stationVisible)for(const slot of stationSlots)if(slot.handle&&slot.anchor){
+        slot.anchor.updateWorldMatrix(true,false);slot.handle.setMatrix(slot.anchor.matrixWorld.elements);
+      }
+      stationVisible=advance(stationSlots,dt,1);
       bossVisible=advance(bossSlots,dt,1);
       bloodVisible=advance(impacts,dt,1);officerVisible=advance(officerSlots,dt,1);
       world.update(dt*60);
@@ -304,7 +324,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     }
   }
   function render(camera) {
-    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible) {
+    if (bloodVisible || officerVisible || supplyVisible || brideVisible || bossVisible || grenadeVisible || stationVisible) {
       world.setProjectionMatrix(camera.projectionMatrix.elements);
       world.setCameraMatrix(camera.matrixWorldInverse.elements);
       world.draw();
@@ -320,6 +340,7 @@ export async function loadCombatParticles(renderer, walletCanvas) {
   function clearWorld(){
     stopWarden();
     stopBride();
+    stopStation();
     stopBossImpacts();
     stopGrenades();
     for(let i=0;i<supplySlots.length;i++)supplyFx(i,null);
@@ -329,6 +350,6 @@ export async function loadCombatParticles(renderer, walletCanvas) {
     world.update(1);hud.update(1);
   }
   return { playBlood, playGrenade, playCoinPickup, update, render, loadWarden, wardenFx, stopWarden, clearWorld, loadSupply, supplyFx,
-    loadBride,brideFx,stopBride,loadBossImpacts,bossImpact,stopBossImpacts };
+    loadBride,brideFx,stopBride,loadStation,stationFx,stopStation,loadBossImpacts,bossImpact,stopBossImpacts };
 }
 

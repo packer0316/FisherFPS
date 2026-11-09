@@ -67,3 +67,12 @@
   mix-blend-mode: screen;
 }
 #app:not(.playing) #reward-tags { visibility: hidden; }
+#refund-notices { position: fixed; z-index: 7; pointer-events: none; overflow: hidden; mask-image: linear-gradient(to bottom, transparent, #000 24px); }
+.refund-notice {
+  position: absolute; bottom: 0; left: 0; white-space: nowrap;
+  color: #bde6ce; font-size: clamp(15px, 1.25vw, 20px); font-weight: 800;
+  font-variant-numeric: tabular-nums; letter-spacing: .03em;
+  text-shadow: 0 2px 3px #000, 0 0 9px #101c17;
+  will-change: transform, opacity;
+}
+#app:not(.playing) #refund-notices { visibility: hidden; }

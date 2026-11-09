@@ -44,7 +44,10 @@ export function makeAutoPlayer(random=Math.random) {
   const aim=v(),probe=v(),direction=v(),momentum=v(),output={x:0,z:0,run:false,jump:false,crouch:false,weapon:null,fire:false,prime:false,release:false};
   let status='待命',trajectoryIn=0;
   function bind(value){
-    world=value;navigation=makeHuntNavigation(world);sweep=makeGrenadeSweep(world);
+    world=value;
+    const navWorld=world.autoPlayAllows?{...world,blocked:(x,z,r,y,h,step)=>
+      !world.autoPlayAllows(x,z,y,r)||world.blocked(x,z,r,y,h,step)}:world;
+    navigation=makeHuntNavigation(navWorld);sweep=makeGrenadeSweep(world);
     actor={root:new T.Group(),nav:navigation.createState(),alive:true,phase:0};
   }
   function stop(){active=false;target=plan=null;output.x=output.z=0;output.fire=output.prime=output.release=false;status='已停止';}
@@ -73,11 +76,14 @@ export function makeAutoPlayer(random=Math.random) {
   function chooseGoal(c){
     const p=c.position;
     goal.copy(patrol.goal);
+    const recovery=world.autoPlayRecovery?.(p.x,p.z,p.y,.5);
+    if(recovery?.distance>.001){goal.set(recovery.x,recovery.y,recovery.z);return;}
     if(detour&&(!(c.pickups??[]).includes(detour)||time>detourTime||hazardRisk(c.hazards,detour.root.position)>.1))detour=null;
     if(config.supplies&&!detour){
       let best=Infinity;
       for(const slot of c.pickups??[]){
         const at=slot.root.position,d=flatDistance(at,p),urgent=slot.reward.kind==='heal'&&c.health<45;
+        if(world.autoPlayAllows&&!world.autoPlayAllows(at.x,at.z,slot.ground??at.y,.5))continue;
         const forward=(at.x-p.x)*(goal.x-p.x)+(at.z-p.z)*(goal.z-p.z);
         if(d>(urgent?12:7)||(!urgent&&forward<0)||hazardRisk(c.hazards,at)>.1)continue;
         const score=d+(urgent?-8:slot.reward.kind==='mg3'&&preferredAutoWeapon(c.economy)!=='mg3'?-4:0);
@@ -127,10 +133,11 @@ export function makeAutoPlayer(random=Math.random) {
       let score=(dx*direction.x+dz*direction.z)*5+continuity*2.2;
       if(!escaping&&stuck<.6)score-=Math.max(0,-continuity)*5;
       let y=p.y,clear=0,danger=0,avoid=0;
-      for(let step=1;step<=12;step++){
-        const ahead=step/12,x=p.x+dx*pace*ahead,z=p.z+dz*pace*ahead;
+      const samples=world.station?Math.ceil(pace/.18):12;
+      for(let step=1;step<=samples;step++){
+        const ahead=step/samples,x=p.x+dx*pace*ahead,z=p.z+dz*pace*ahead;
         const limits=world.verticalLimits(x,z,y,1.84),floor=limits.floor;
-        if(world.blocked(x,z,.4,y,1.84,.24)||floor<y-.6||floor>y+.25){score-=28*(1-ahead);break;}
+        if((world.autoPlayStep&&!world.autoPlayStep(p,x,z,floor,.5))||world.blocked(x,z,.4,y,1.84,.24)||floor<y-.6||floor>y+.25){score-=28*(1-ahead);break;}
         y=floor;probe.set(x,y,z);clear=ahead;
         danger+=hazardRisk(hazards,probe,ahead);
         for(const enemy of c.hunt.targets){
@@ -142,7 +149,7 @@ export function makeAutoPlayer(random=Math.random) {
       if(clear<.25)continue;
       // Compare the average danger and closest enemy approach, not a sum that
       // accidentally rewards short, wall-blocked rays for sampling fewer mobs.
-      score+=clear*2-danger/(clear*12)*36-avoid;
+      score+=clear*2-danger/(clear*samples)*36-avoid;
       // Discourage returning to the same few metres, while allowing an urgent
       // escape to override this soft preference through the hazard score.
       for(let n=0;n<trail.length-2;n++){

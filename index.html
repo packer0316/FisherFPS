@@ -20,6 +20,12 @@
       <div id="heal-glow" class="supply-glow" aria-hidden="true"></div>
       <div id="speed-glow" class="supply-glow" aria-hidden="true"></div>
       <div id="damage-overlay" aria-hidden="true"></div>
+      <div id="train-warning" role="alert" hidden>
+        <small>月台安全警告</small>
+        <strong>列車即將啟動，請離開車廂</strong>
+        <span>正在引導你返回月台，抵達後恢復操控</span>
+        <div class="train-warning-progress"><i></i></div>
+      </div>
       <header>
         <div class="brand">
           <svg viewBox="0 0 44 34" aria-hidden="true">
@@ -62,18 +68,20 @@
         <div id="reticle"><i></i><i></i><i></i><i></i><b></b></div>
         <div id="enemyhud">
           <span id="enemy-name"></span>
+          <small id="enemy-prize"></small>
           <div><b id="enemy-health"></b></div>
         </div>
         <div id="hitmark">×</div>
         <section id="boss-health" hidden aria-label="典獄長血量">
-          <div><b id="boss-name">典獄長</b><span id="boss-cue"></span><strong id="boss-percent">100%</strong></div>
-          <div class="boss-meter"><i id="boss-fill"></i></div>
+          <div><b id="boss-name">典獄長</b><span id="boss-cue"></span><strong id="boss-percent" title="每次付費命中的擊倒率"></strong></div>
+          <div class="boss-stakes"><span id="boss-prize"></span><span id="boss-rage">怒氣 0%</span></div>
+          <div class="boss-meter" aria-label="BOSS 怒氣，與擊倒率無關"><i id="boss-fill"></i></div>
         </section>
         <div id="reward"></div>
         <section id="brief">
           <div class="operation"><span></span> OPERATION <b>/</b> DUST BAZAAR</div>
           <h1>沙境獵場<span>.</span></h1>
-          <p>瞄準獵物開火，擊倒領賞。擊中牆面會退還該發費用。</p>
+          <p>瞄準獵物開火，擊倒領賞。沒有命中怪物會全額退款。</p>
           <button id="deploy">
             <i data-icon="crosshair"></i><strong>進入獵場</strong><i data-icon="arrow"></i>
           </button>
@@ -90,7 +98,7 @@
           <div id="player-health" class="stat" hidden><div><small>生命</small><strong id="health-value">100</strong></div></div>
           <div class="stat">
             <span id="wallet-anchor"><i data-icon="coin"></i><canvas id="wallet-pickup" width="144" height="144" aria-hidden="true"></canvas></span>
-            <div><small>賞金餘額</small><strong id="wallet">100,000</strong></div>
+            <div><small>賞金餘額</small><strong id="wallet">10,000,000</strong></div>
           </div>
           <div class="stat kills">
             <i data-icon="target"></i>
@@ -105,7 +113,7 @@
             <i id="weapon-icon"></i><b id="ammo">30</b><span>/ <em id="capacity">30</em></span>
           </div>
           <div class="weapon-foot">
-            <strong id="weapon-name">AK-47 突擊步槍</strong><span id="cost">10 幣 / 發</span>
+            <strong id="weapon-name">AK-47 突擊步槍</strong><span id="cost">10,000 幣 / 命中</span>
           </div>
         </div>
         <div id="touch">
@@ -136,16 +144,16 @@
         <div class="lobby-content">
           <div class="lobby-heading">
             <div><div class="lobby-eyebrow"><span></span> HUNTER'S LOBBY</div><h1 id="lobby-title">選擇你的獵場<span>.</span></h1><p>整備武器，開始下一場狩獵。</p></div>
-            <div class="lobby-account"><i data-icon="coin"></i><div><small>賞金餘額</small><strong id="lobby-wallet">100,000</strong></div></div>
+            <div class="lobby-account"><i data-icon="coin"></i><div><small>賞金餘額</small><strong id="lobby-wallet">10,000,000</strong></div></div>
           </div>
           <div class="lobby-bet">
-            <div><label for="bet-amount">BET <span>單發金額</span></label><p id="bet-help">每次射擊扣除所選賞金，適用所有槍械。</p></div>
+            <div><label for="bet-amount">BET <span>單發金額</span></label><p id="bet-help">命中才扣款，獎金隨 BET 放大。射擊理論 RTP 97%；免費手榴彈另計。</p></div>
             <div class="bet-controls">
               <button id="bet-minus" type="button" aria-label="減少單發金額">−</button>
-              <div class="bet-value"><input id="bet-amount" type="number" min="1" max="1000" step="1" value="10" inputmode="numeric" aria-describedby="bet-help bet-range"><span>幣 / 發</span></div>
+              <div class="bet-value"><input id="bet-amount" type="number" min="1" max="1000000" step="1" value="10000" inputmode="numeric" aria-describedby="bet-help bet-range"><span>幣 / 發</span></div>
               <button id="bet-plus" type="button" aria-label="增加單發金額">+</button>
             </div>
-            <small id="bet-range">可設定 1–1,000 幣</small>
+            <small id="bet-range">可設定 1–1,000,000 幣</small>
           </div>
           <div class="lobby-modes" aria-label="遊戲模式">
             <button id="mode-normal" class="lobby-card hunt-card">
@@ -174,10 +182,9 @@
             <button id="challenge-bride" class="challenge-card">
               <span class="challenge-copy"><small>永夜古堡 · 冥婚大廳</small><strong>鬼新娘</strong><span id="start-bride">進入挑戰　→</span></span>
             </button>
-            <div class="challenge-reserves">
-              <button disabled>挑戰 03 <small>尚未開放</small></button>
-              <button disabled>挑戰 04 <small>尚未開放</small></button>
-            </div>
+            <button id="challenge-stationmaster" class="challenge-card">
+              <span class="challenge-copy"><small>中央車站 · 末班列車</small><strong>站長</strong><span id="start-stationmaster">進入挑戰　→</span></span>
+            </button>
           </div>
           <button id="leave-prison" class="challenge-secondary" hidden>回到首頁</button>
         </section>

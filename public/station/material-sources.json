@@ -1,0 +1,24 @@
+{
+  "leather": {
+    "asset": "Leather White",
+    "author": "Rob Tuytel",
+    "source": "https://polyhaven.com/a/leather_white",
+    "license": "CC0",
+    "licenseUrl": "https://polyhaven.com/license",
+    "physicalWidthMetres": 0.3,
+    "files": {
+      "leather-normal.jpg": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leather_white/leather_white_nor_gl_1k.jpg",
+      "leather-rough.jpg": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leather_white/leather_white_rough_1k.jpg"
+    },
+    "usage": "Original green seat colour retained; OpenGL normal and roughness data are packed into one 512px desktop / 256px coarse runtime texture. No external runtime requests."
+  },
+  "otherSurfaces": "Existing project /surfaces wood, plaster and paving maps; sources are linked in README.md (Poly Haven Brown Planks 03, Damaged Plaster and Cobblestone Floor 08). Original station/train atlases and window reflection map are documented in SOURCE.json.",
+  "briefing.webp": {
+    "source": "In-engine station render using the project assets, captured 2026-11-09",
+    "cameraPosition": [0, 4.2, 16],
+    "cameraTarget": [0, 7, -17],
+    "verticalFov": 64,
+    "resolution": [1440, 550],
+    "usage": "BOSS selection background; original /autoplay/stationmaster.webp is layered separately by CSS."
+  }
+}

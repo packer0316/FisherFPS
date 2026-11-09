@@ -2,7 +2,7 @@ import { makeRewardTagState, formatReward, easeOut, REWARD_HOLD, REWARD_EXIT, RE
 import { parseRewardFont, drawRewardNumber } from './reward-font.js';
 
 const kinds = { bronze: '命中小獎', silver: '擊倒賞金', gold: 'BOSS 賞金' };
-const portraits = new Set(['walker', 'stalker', 'mummy', 'raider', 'necromancer', 'bride', 'warden']);
+const portraits = new Set(['walker', 'stalker', 'mummy', 'raider', 'necromancer', 'bride', 'warden', 'stationmaster']);
 async function loadImage(src) {
   const img = new Image(); img.src = src; await img.decode(); return img;
 }

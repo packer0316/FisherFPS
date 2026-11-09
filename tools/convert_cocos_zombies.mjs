@@ -6,12 +6,21 @@ import { Matrix4, Vector3, Quaternion } from 'three';
 
 const supplyDirectory = process.argv[2] === '--supply' ? process.argv[3] : null;
 const brideDirectory = process.argv[2] === '--bride' ? process.argv[3] : null;
+const stationDirectory = process.argv[2] === '--station' ? process.argv[3] : null;
 const source = process.argv[2];
 if (!source) throw new Error('Pass the TMDC_Zombie directory as the first argument.');
-const output = fileURLToPath(new URL(supplyDirectory ? '../public/supplies/' : '../public/monsters/', import.meta.url));
+const output = fileURLToPath(new URL(stationDirectory ? '../public/station/' : supplyDirectory ? '../public/supplies/' : '../public/monsters/', import.meta.url));
 fs.mkdirSync(output, { recursive: true });
-const officerDirectory = supplyDirectory || brideDirectory ? null : process.argv[3];
-const characters = brideDirectory ? [
+const officerDirectory = supplyDirectory || brideDirectory || stationDirectory ? null : process.argv[3];
+const characters = stationDirectory ? [
+  ['station-scene', 'Scene_ZB/TrainStation', 'Train_scene', 'train_scene'],
+  ['station-door', 'Scene_ZB/TrainStation', 'door', 'train_scene'],
+  ['station-flag', 'Scene_ZB/TrainStation', 'flag', 'train_scene'],
+  ['train-body', 'Scene_ZB/TrainStation/train', 'TRAIN_C_2', 'TRAIN_C_2'],
+  ['train-head', 'Scene_ZB/TrainStation/train', 'Bonus_train', 'TRAIN_C'],
+  ['train-gold', 'Scene_ZB/TrainStation/train', 'gold_train', 'TRAIN_A'],
+  ['stationmaster', 'Fish/station_director', 'station_director', 'Station_director_diffuse'],
+] : brideDirectory ? [
   ['bride', '', 'Eternal_Bride', 'Eternal_Basecolor'],
 ] : supplyDirectory ? [
   ['airdrop', '', 'Airdrop_box', 'Airdrop_box_2D_View'],
@@ -23,7 +32,8 @@ const characters = brideDirectory ? [
   ['raider', 'Thief', 'Grave_robber', 'Grave_robber'],
 ];
 for (const [key, folder, model, skin] of characters) {
-  const dir = brideDirectory ?? supplyDirectory ?? officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
+  const dir = stationDirectory ? path.join(stationDirectory, 'ClientCocos/ZombieResource/Models', folder)
+    : brideDirectory ?? supplyDirectory ?? officerDirectory ?? path.join(source, 'ClientCocos/ZombieResource/Models/Fish', folder);
   const data = fs.readFileSync(path.join(dir, model + '.c3b'));
   if (!data.subarray(0, 6).equals(Buffer.from([67, 51, 66, 0, 0, 7])))
     throw new Error('Expected C3B 0.7');
@@ -215,6 +225,7 @@ for (const [key, folder, model, skin] of characters) {
         ),
       }) - 1;
   }
+  if(offsets.has(3)) {
   cursor = offsets.get(3);
   const anim = { name: string(), samplers: [], channels: [] };
   const duration = f32(),
@@ -247,6 +258,7 @@ for (const [key, folder, model, skin] of characters) {
       }
   }
   gltf.animations.push(anim);
+  }
   gltf.images.push({
     mimeType: brideDirectory ? 'image/png' : 'image/jpeg',
     bufferView: bufferView(fs.readFileSync(path.join(dir, skin + (brideDirectory ? '.png' : '.jpg')))),
@@ -274,4 +286,5 @@ for (const [key, folder, model, skin] of characters) {
     path.join(output, key + '.glb'),
     Buffer.concat([header, json, Buffer.alloc(jsonSize - json.length, 32), bin, ...chunks]),
   );
+  if(stationDirectory)console.log(key, 'meshes:', gltf.meshes.map(m=>m.name).join(', '), 'clips:',gltf.animations.length);
 }

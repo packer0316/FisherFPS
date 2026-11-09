@@ -4,6 +4,7 @@ import vertexShader from './shaders/reward-coins/coin.vert?raw';
 import originalFragment from './shaders/reward-coins/unlitCustom.frag?raw';
 import shadowFragment from './shaders/reward-coins/shadow.frag?raw';
 import { makeBossCoinPlan, bossCollectCadence } from './boss-payout.js';
+import { makeCoinFloor, clearCoinFloor } from './reward-coin-clearance.js';
 
 const path = '/effects/reward-coins/';
 const unit = 0.05; // Metres per TMDC board unit, shared by the model and the trajectories.
@@ -53,6 +54,11 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
   ]);
   for (const texture of [base, normal, add, multiply]) texture.flipY = false;
   const geometry = asset.scene.children[0].geometry;
+  geometry.computeBoundingBox();
+  const coinMinY=geometry.boundingBox.min.y,coinRadius=Math.hypot(
+    Math.max(Math.abs(geometry.boundingBox.min.x),Math.abs(geometry.boundingBox.max.x)),
+    Math.max(Math.abs(geometry.boundingBox.min.z),Math.abs(geometry.boundingBox.max.z)));
+  const coinFloor=makeCoinFloor(world);
   const material = new T.RawShaderMaterial({
     vertexShader,
     fragmentShader: 'precision highp float;\nuniform mat4 viewMatrix;\n' +
@@ -110,7 +116,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     if (active === capacity) return;
     const s = pool[active++];
     s.boss=false;s.value=0;
-    s.x = origin.x; s.y = origin.y; s.z = origin.z;
+    s.x = origin.x; s.y = origin.y; s.z = origin.z;s.lastBottom=origin.y;
     s.floorY = floorY;
     // Stop the fan at cover. Query terrain at spawn time rather than raycasting every frame.
     for (let step = 1; step <= 4; step++) {
@@ -122,7 +128,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
     }
     s.dx = dx; s.dz = dz;
     const endX = s.x + dx, endZ = s.z + dz;
-    const ground = world.terrainHeight(endX, endZ, s.y);
+    const ground = coinFloor(endX, endZ, Math.max(floorY,s.y));
     s.dy = ground - s.y;
     s.slopeX = T.MathUtils.clamp((world.terrainHeight(endX + 0.08, endZ, ground) - ground) / 0.08, -1, 1);
     s.slopeZ = T.MathUtils.clamp((world.terrainHeight(endX, endZ + 0.08, ground) - ground) / 0.08, -1, 1);
@@ -183,7 +189,7 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
       Object.assign(s,{boss:true,index:p.index,value:p.value,x:origin.x,y:origin.y+.4,z:origin.z,
         dx:p.x-origin.x,dy:p.y-origin.y-.4,dz:p.z-origin.z,floorY:origin.y,
         slopeX:0,slopeZ:0,size:p.big?2:1,alpha:1,age:-p.delay,scatter:.9,
-        flyAt:Infinity,high:p.high,low:p.high*.35,angle:random(0,turn)});
+        flyAt:Infinity,high:p.high,low:p.high*.35,angle:random(0,turn),lastBottom:origin.y});
     }
     return plan;
   }
@@ -257,6 +263,10 @@ export async function loadRewardCoins(scene, world, camera, coarse) {
         const iconScale = 2 * halfHeight * walletHeight / 85.62;
         size = lerp(size, iconScale, T.MathUtils.smoothstep(flight, 0.18, 1));
       }
+      // Camera-space guidance may cross below the floor when looking down.
+      // Keep the entire scaled model above terrain, treads and elevated slabs.
+      if(flight>0)pose.position.y+=Math.sin(Math.PI*travel)*Math.min(.9,Math.hypot(x-goal.x,z-goal.z)*.035);
+      s.lastBottom=clearCoinFloor(pose.position,size,coinMinY,coinRadius,s.lastBottom,coinFloor);
       pose.scale.setScalar(size);
       pose.rotation.y = s.angle + s.age * turn;
       pose.updateMatrix();

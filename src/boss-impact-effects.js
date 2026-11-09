@@ -88,15 +88,16 @@ export async function makeBossImpactEffects(scene,particles,theme) {
   const point=new T.Vector3(),pose=new T.Object3D();
   let stoneIndex=0,lightIndex=0;
   function burst(wave,c) {
+    const floorY=wave.floorY??0;
     const round=c.shape!=='line',slot=stains[next++%stains.length];
     slot.age=0;slot.life=round?.55:.85;
     slot.uniforms.age.value=0;slot.uniforms.round.value=round?1:0;
     slot.uniforms.inner.value=round?c.inner/c.radius:0;slot.uniforms.seed.value=Math.random()*8;
     slot.mesh.visible=true;
     if(round){
-      slot.mesh.position.set(c.x,.065,c.z);slot.mesh.rotation.y=0;slot.mesh.scale.set(c.radius*2,1,c.radius*2);
+      slot.mesh.position.set(c.x,floorY+.065,c.z);slot.mesh.rotation.y=0;slot.mesh.scale.set(c.radius*2,1,c.radius*2);
     }else{
-      slot.mesh.position.set(c.x+c.dx*c.length/2,.065,c.z+c.dz*c.length/2);
+      slot.mesh.position.set(c.x+c.dx*c.length/2,floorY+.065,c.z+c.dz*c.length/2);
       slot.mesh.rotation.y=Math.atan2(c.dx,c.dz);slot.mesh.scale.set(c.width,1,c.length);
     }
     // No point flash in a hollow annulus: put bursts on its advancing edge.
@@ -104,27 +105,28 @@ export async function makeBossImpactEffects(scene,particles,theme) {
     for(let i=0;i<nativeCount;i++){
       if(round&&c.inner>0){
         const a=c.step*2.4+i*Math.PI,r=(c.inner+c.radius)/2;
-        point.set(c.x+Math.cos(a)*r,.12,c.z+Math.sin(a)*r);
-      }else point.copy(slot.mesh.position).setY(.12);
+        point.set(c.x+Math.cos(a)*r,floorY+.12,c.z+Math.sin(a)*r);
+      }else point.copy(slot.mesh.position).setY(floorY+.12);
       particles.bossImpact(theme,point,round?(c.inner>0?.48:.7):.72);
       const index=plumeIndex++%plumeCount,p=plumePool[index];
       p.age=0;p.life=violet?.64:.8;
       p.size=round?(c.inner>0?1.85:3.5):3.7;
-      centers.setXYZ(index,point.x,p.size*.36,point.z);
+      centers.setXYZ(index,point.x,floorY+p.size*.36,point.z);
       states.setXYZW(index,0,p.size,p.size*1.25,p.seed);
       plumes.visible=true;centers.needsUpdate=states.needsUpdate=true;
     }
     const lamp=lights[lightIndex++%lights.length];lamp.age=0;lamp.peak=violet?23:38;
-    lamp.light.position.copy(point).y=1.4;lamp.light.intensity=lamp.peak;
+    lamp.light.position.copy(point).y=floorY+1.4;lamp.light.intensity=lamp.peak;
     const count=coarse?6:11;
     for(let i=0;i<count;i++){
       const s=stones[stoneIndex++%capacity],a=(i+Math.random())*Math.PI*2/count;
+      s.floorY=floorY;
       if(round){
         const r=T.MathUtils.lerp(c.inner,c.radius,Math.random());
-        s.position.set(c.x+Math.cos(a)*r,.12,c.z+Math.sin(a)*r);
+        s.position.set(c.x+Math.cos(a)*r,floorY+.12,c.z+Math.sin(a)*r);
       }else{
         const along=Math.random()*c.length,side=(Math.random()-.5)*c.width;
-        s.position.set(c.x+c.dx*along+c.dz*side,.12,c.z+c.dz*along-c.dx*side);
+        s.position.set(c.x+c.dx*along+c.dz*side,floorY+.12,c.z+c.dz*along-c.dx*side);
       }
       const speed=1.2+Math.random()*2.8;
       s.velocity.set(Math.cos(a)*speed,2.5+Math.random()*4.5,Math.sin(a)*speed);
@@ -153,7 +155,7 @@ export async function makeBossImpactEffects(scene,particles,theme) {
     for(const s of stones){
       if(s.age>=s.life)continue;
       s.age+=dt;s.velocity.y-=9.81*dt;s.position.addScaledVector(s.velocity,dt);
-      if(s.position.y<s.size){s.position.y=s.size;s.velocity.y=Math.abs(s.velocity.y)*.23;s.velocity.x*=.75;s.velocity.z*=.75;}
+      if(s.position.y<s.floorY+s.size){s.position.y=s.floorY+s.size;s.velocity.y=Math.abs(s.velocity.y)*.23;s.velocity.x*=.75;s.velocity.z*=.75;}
       s.rotation.x+=dt*4.5;s.rotation.z+=dt*3;
       pose.position.copy(s.position);pose.rotation.copy(s.rotation);
       pose.scale.set(1.3,.7,1).multiplyScalar(s.size*Math.min(1,(s.life-s.age)/.3));

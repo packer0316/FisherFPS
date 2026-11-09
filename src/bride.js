@@ -1,3 +1,4 @@
+import { bossEnraged } from './rtp.js';
 
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -72,7 +73,7 @@ export async function loadBride(scene,world,particles,groundImpact) {
   holder.scale.setScalar(factor);holder.position.set(-center.x*factor,.45-bounds.min.y*factor,-center.z*factor);
   const target={root,model,height:height+.45,hitRadius:height,bodyRadius:2.7,groundY:0,boss:true,
     chest:model.getObjectByName('Bip001_Spine1'),head:model.getObjectByName('Bip001_Head'),
-    type:{id:'bride',name:'鬼新娘',reward:520,smallPrizeChance:.06},hp:maxHp,maxHp,alive:false,opacity:0};
+    type:{id:'bride',name:'鬼新娘'},hp:maxHp,maxHp,alive:false,opacity:0};
   // FishEternalBrideEfkSetting: the original local rotation is -90° about X.
   // Bone-bound effects inherit the complete animated bone matrix, including cm conversion.
   const soulBone=model.getObjectByName('Soul')??model.getObjectByName('Bip001_L_Hand');
@@ -96,7 +97,7 @@ export async function loadBride(scene,world,particles,groundImpact) {
   }
   function reset() {
     stop();trackingPlayer=false;velocity.set(0,0);contactCooldown=0;mixer.stopAllAction();current='idle1';state='intro';time=cycle=beat=0;hp=100;
-    target.hp=maxHp;target.alive=false;target.opacity=0;root.visible=true;
+    target.hp=maxHp;target.rage=0;target.hitCount=0;target.alive=false;target.opacity=0;root.visible=true;
     root.position.set(0,0,-12);root.rotation.set(0,0,0);
     dissolve.value=flash.value=0;play('ingame',0);mixer.update(0);
     particles.brideFx('intro',body);
@@ -116,10 +117,10 @@ export async function loadBride(scene,world,particles,groundImpact) {
       state='march';play('idle2');particles.brideFx('soul',soul,6.67);
       const candidates=hunt.enemies.filter(e=>e.alive&&!e.entry)
         .sort((a,b)=>a.root.position.distanceToSquared(camera.position)-b.root.position.distanceToSquared(camera.position))
-        .slice(0,target.hp<maxHp/2?6:4);
+        .slice(0,bossEnraged(target)?6:4);
       candidates.forEach((e,i)=>{
         const p=e.root.position,lane=clipBossLane(p,player,world.navigationBounds,5,30);
-        const delay=1.4+Math.floor(i/2)*.5,speed=target.hp<maxHp/2?6.3:5.5;
+        const delay=1.4+Math.floor(i/2)*.5,speed=bossEnraged(target)?6.3:5.5;
         const end=new T.Vector3(p.x+lane.dx*lane.length,0,p.z+lane.dz*lane.length);
         hazards.mark(i,{...lane,width:2.2,linger:Math.min(4,lane.length/speed),kind:'march'},delay);
         hunt.command(e,p,delay+.05,0);
@@ -138,10 +139,10 @@ export async function loadBride(scene,world,particles,groundImpact) {
       burst.position.set(T.MathUtils.clamp(player.x,-13,13),.06,T.MathUtils.clamp(player.z,-18,18));
       hazards.mark(0,{shape:'circle',x:burst.position.x,z:burst.position.z,radius:11,inner:4.3,linger:.35,duration:.85,steps:10,kind:'vow'},2.333);
     }
-    emit('boss:attack',{species:'bride',attack:state,phase:target.hp<maxHp/2?2:1});
+    emit('boss:attack',{species:'bride',attack:state,phase:bossEnraged(target)?2:1});
   }
   function markInvitations(player) {
-    const enraged=target.hp<maxHp/2,count=enraged?3:2;
+    const enraged=bossEnraged(target),count=enraged?3:2;
     const lead=.45,px=player.x+velocity.x*lead,pz=player.z+velocity.y*lead;
     for(let i=0;i<count;i++) {
       const angle=beat*1.9+(i-1)*Math.PI+.4;
@@ -236,7 +237,7 @@ export async function loadBride(scene,world,particles,groundImpact) {
       if(actions[current].time>=actions[current].getClip().duration){
         clearAttack();
         if(!target.alive)return beginDeath();
-        state='roam';time=0;wait=target.hp<=maxHp/2?.85:1.6;play('idle1');
+        state='roam';time=0;wait=bossEnraged(target)?.85:1.6;play('idle1');
       }
       return;
     }
@@ -257,7 +258,7 @@ export async function loadBride(scene,world,particles,groundImpact) {
     if(state==='roam'){state='prize';play('small_reward');time=0;}
     particles.brideFx('hit',soul);
     const bigCoins=T.MathUtils.randInt(1,3),smallCoins=T.MathUtils.randInt(5,7);
-    return {bigCoins,smallCoins,amount:bigCoins*5+smallCoins,floorY:0};
+    return {bigCoins,smallCoins,floorY:0};
   }
   return {target,reset,update,stop,defeat,smallPrize,hit(){flash.value=.35;},
     get hazards(){return hazards.pool;},
@@ -266,6 +267,6 @@ export async function loadBride(scene,world,particles,groundImpact) {
     get health(){return hp;},
     cue(){return state==='intro'?'冥婚之夜 · 鬼新娘降臨':state==='summon'?'亡者請柬：遠離咒圈':
       state==='march'?'送葬遊行：側移、射殺阻止衝鋒':state==='vow'?(beat?'誓約反噬：立即離開圓心':'怨月誓環：空心內與環外安全'):
-      state==='dying'?'婚誓已破 · 怨靈消散':target.hp<=maxHp/2?'怨念加劇':'';},
+      state==='dying'?'婚誓已破 · 怨靈消散':bossEnraged(target)?'怨念加劇':'';},
   };
 }

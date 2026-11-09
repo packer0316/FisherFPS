@@ -15,16 +15,16 @@ export function makeGrenadeProjectiles(scene,world,onBlast,onBounce) {
     ray.set(from,direction.divideScalar(distance));ray.near=.06;ray.far=distance-.05;
     return ray.intersectObjects(world.zones,false).length===0;
   }
-  function burst(position) {
+  function burst(position,context) {
     // Actual flash, debris and smoke are the EFK assets in combat-particles.
     // This light is the short illumination they cast onto the world geometry.
     const light=new T.PointLight(0xffbd78,110,18,2);light.position.copy(position).add(new T.Vector3(0,.8,0));group.add(light);
-    flashes.push({light,age:0});onBlast(position);
+    flashes.push({light,age:0});onBlast(position,context);
   }
-  function launch(origin,velocity) {
+  function launch(origin,velocity,context) {
     const mesh=template.root.clone(true);mesh.scale.setScalar(1.45);group.add(mesh);
     const ball=makeBallistic(origin,velocity,sweep);mesh.position.copy(origin);
-    flying.push({mesh,ball,bounces:0});
+    flying.push({mesh,ball,bounces:0,context});
   }
   function update(dt) {
     if(dt<=0)return;
@@ -33,7 +33,7 @@ export function makeGrenadeProjectiles(scene,world,onBlast,onBounce) {
       item.mesh.position.copy(item.ball.position);
       if(!item.ball.resting){item.mesh.rotation.x+=dt*8;item.mesh.rotation.z+=dt*5;}
       if(item.ball.bounces!==item.bounces){item.bounces=item.ball.bounces;onBounce?.(item.ball.position,item.ball.velocity.length());}
-      if(detonate){burst(item.ball.position.clone());group.remove(item.mesh);flying.splice(i,1);}
+      if(detonate){burst(item.ball.position.clone(),item.context);group.remove(item.mesh);flying.splice(i,1);}
     }
     for(let i=flashes.length-1;i>=0;i--){
       const f=flashes[i];f.age+=dt;f.light.intensity=110*Math.exp(-f.age*14);

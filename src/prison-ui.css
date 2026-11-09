@@ -64,7 +64,7 @@
   font-size: 38px;
   line-height: 1.4;
 }
-#start-warden, #start-bride {
+#start-warden, #start-bride, #start-stationmaster {
   margin-top: 21px;
   background: #e7b583;
   color: #201e1a;
@@ -134,7 +134,11 @@
     18px BarlowC,
     sans-serif;
   margin-left: auto;
+  white-space: nowrap;
 }
+.boss-stakes {display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#c7d8d6;margin-top:5px;font-variant-numeric:tabular-nums;}
+#enemy-prize {display:block;font-size:11px;white-space:nowrap;color:#f5daa3;margin-top:4px;}
+#enemyhud > div[hidden] {display:none;}
 #boss-cue {
   font-size: 12px;
   color: #ffd198;
@@ -243,6 +247,27 @@
 
 #challenge-bride {background:linear-gradient(90deg,#171323ec,#22192b45),url('/castle/briefing.webp') center/cover;background-color:#332a42}
 #start-bride {background:#d6b9e8}
+#challenge-stationmaster {
+  grid-column:1/-1;
+  background:
+    linear-gradient(90deg,#101b29e6 0%,#101b2966 45%,#18374518 100%),
+    url('/autoplay/stationmaster.webp') right center / auto 100% no-repeat,
+    linear-gradient(#101b2930,#101b2930),
+    url('/station/briefing.webp') center 48% / cover;
+  background-color:#233645;
+}
+#start-stationmaster {background:#a3c7da}
+.station #boss-health {border-top-color:#abcbdc}
+.station #boss-fill {background:linear-gradient(90deg,#43768a,#c7dfe6)}
+.station #boss-cue {font-size:11px}
+.station .location b {font-size:10px}
+#train-warning {position:absolute;z-index:25;top:24%;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 40px));padding:21px 24px;background:#241b12ed;border:1px solid #c99753;border-top:3px solid #f3bb65;box-shadow:0 12px 40px #0006;color:#fff0d5;text-align:center;pointer-events:none}
+#train-warning[hidden] {display:none}
+#train-warning small {display:block;color:#edb76b;font-size:11px;letter-spacing:3px;margin-bottom:10px}
+#train-warning strong {display:block;font-size:20px;line-height:1.5}
+#train-warning span {display:block;color:#cbbca6;font-size:12px;line-height:1.7;margin-top:8px}
+.train-warning-progress {height:3px;background:#695037;margin-top:17px;overflow:hidden}
+.train-warning-progress i {display:block;height:100%;width:0;background:#efbd73}
 .castle #boss-health {border-top-color:#c096d8}
 .castle #boss-fill {background:linear-gradient(90deg,#713580,#d595cb)}
 .castle .location {align-items:center}
@@ -258,5 +283,5 @@
  .challenge-card {min-height:158px}
  .challenge-copy {padding:15px}
  .challenge-copy strong {font-size:30px}
- #start-warden,#start-bride {margin-top:10px}
+ #start-warden,#start-bride,#start-stationmaster {margin-top:10px}
 }
