@@ -141,6 +141,10 @@
         <span class="mobile-legend">搖桿推到底跑步　右側滑動轉向　先蹲再跳可跳更高</span>
       </footer>
       <section id="lobby" aria-labelledby="lobby-title" hidden>
+        <div class="lobby-atmosphere" aria-hidden="true">
+          <img class="lobby-claw" src="/lobby/blood-claw.webp" alt="" width="1024" height="1536" draggable="false">
+          <i class="lobby-impact impact-one"></i><i class="lobby-impact impact-two"></i>
+        </div>
         <div class="lobby-content">
           <div class="lobby-heading">
             <div><div class="lobby-eyebrow"><span></span> HUNTER'S LOBBY</div><h1 id="lobby-title">選擇你的獵場<span>.</span></h1><p>整備武器，開始下一場狩獵。</p></div>
@@ -162,10 +166,14 @@
               <span class="lobby-card-copy"><small>DUST BAZAAR</small><strong>一般模式</strong><span>穿越沙境街巷，擊倒殭屍，收集賞金。</span><b>進入獵場 <i data-icon="arrow"></i></b></span>
             </button>
             <button id="mode-boss" class="lobby-card boss-card">
-              <img class="lobby-scene" src="/prison/briefing.webp" alt="" width="744" height="386">
-              <img class="lobby-bride" src="/castle/bride-victory.png" alt="" width="600" height="760">
-              <span class="lobby-card-top"><span>02 / BOSS</span><span class="lobby-tag">2 場挑戰</span></span>
-              <span class="lobby-card-copy"><small>SPECIAL ENCOUNTERS</small><strong>BOSS 挑戰</strong><span>典獄長、鬼新娘。踏入他們的領地。</span><b>選擇 BOSS <i data-icon="arrow"></i></b></span>
+              <img class="lobby-scene" src="/lobby/boss-hall.webp" alt="" width="1536" height="1024">
+              <span class="lobby-boss-art" aria-hidden="true">
+                <img class="lobby-boss-warden" src="/prison/warden-victory.webp" alt="" width="282" height="401">
+                <img class="lobby-boss-bride" src="/castle/bride-victory.png" alt="" width="600" height="760">
+                <img class="lobby-boss-stationmaster" src="/autoplay/stationmaster.webp" alt="" width="256" height="256">
+              </span>
+              <span class="lobby-card-top"><span>02 / BOSS</span><span class="lobby-tag">3 場挑戰</span></span>
+              <span class="lobby-card-copy"><small>SPECIAL ENCOUNTERS</small><strong>BOSS 挑戰</strong><span>典獄長、鬼新娘、站長。踏入他們的領地。</span><b>選擇 BOSS <i data-icon="arrow"></i></b></span>
             </button>
           </div>
           <div class="lobby-bottom"><span><i class="live-dot"></i> 準備就緒</span><span>目前裝備 <b id="lobby-weapon">AK-47 突擊步槍</b></span><span>更多模式，敬請期待</span></div>

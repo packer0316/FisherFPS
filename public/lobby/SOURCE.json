@@ -1,0 +1,22 @@
+{
+  "asset": "boss-hall.webp",
+  "created": "2026-11-09",
+  "method": "Generated using the built-in image_gen tool; encoded as WebP without cropping or compositing.",
+  "dimensions": [1536, 1024],
+  "purpose": "Text-free architectural backdrop for the lobby's three-BOSS challenge card.",
+  "prompt": "Empty European gothic industrial great hall, dark vaulted ceiling, weathered stone piers and subtle iron ribs, arched windows with restrained cool moonlight and faint bronze reflections. Landscape 3:2, frontal eye-level wide composition, low clutter and medium contrast, charcoal/slate with subtle purple shadows. Bottom third fades naturally to near-black for live UI text. No people, creatures, trains, signs, posters, text, digits, clocks, logos, watermarks or UI. 3D game environment style.",
+  "characterLayers": [
+    "../prison/warden-victory.webp",
+    "../castle/bride-victory.png",
+    "../autoplay/stationmaster.webp"
+  ],
+  "notes": "Characters remain the game's existing separate image layers. The generated background contains no lettering or station signage. Labels and the challenge count are live HTML.",
+  "decoration": {
+    "asset": "blood-claw.webp",
+    "created": "2026-11-09",
+    "method": "Generated using image_gen with transparent_background=true; encoded as WebP preserving alpha and original dimensions.",
+    "dimensions": [1024, 1536],
+    "purpose": "Static, low-opacity background decoration outside the lobby controls.",
+    "prompt": "An isolated cluster of four uneven diagonal claw gouges with narrow chipped dark-gunmetal edges and dried oxblood/crimson smears, sparse flecks, subdued cinematic game texture. Tall 2:3 composition, transparent margins and background. No people, body parts, flesh, walls, plates, frame, lettering, logos or symbols."
+  }
+}
