@@ -55,7 +55,8 @@ async function boot() {
   const supplyEffects=makeSupplyEffects();
   const damageFeedback=makeDamageFeedback($('damage-overlay'));
   const economy = {
-    wallet: 1000,
+    wallet: 100000,
+    bet: 10,
     kills: 0,
     wave: 1,
     owned: new Set([startingWeapon, 'pistol', 'knife']),
@@ -198,6 +199,9 @@ async function boot() {
     $('wallet').textContent = economy.wallet.toLocaleString('en-US');
     $('lobby-wallet').textContent=economy.wallet.toLocaleString('en-US');
     $('lobby-weapon').textContent=weapon().name;
+    $('bet-amount').value = String(economy.bet);
+    $('bet-minus').disabled = economy.bet <= 1;
+    $('bet-plus').disabled = economy.bet >= 1000;
     $('kills').textContent = String(economy.kills).padStart(2, '0');
     $('wave').textContent = String(economy.wave).padStart(2, '0');
     const knife = economy.weapon === 'knife';
@@ -209,7 +213,7 @@ async function boot() {
     $('auto-btn').setAttribute('aria-pressed', String(!knife && autoFire));
     $('auto-label').textContent = knife ? '近戰模式' : autoFire ? '自動射擊：開' : '自動射擊：關';
     $('weapon-name').textContent = weapon().name;
-    $('cost').textContent = knife ? '近戰距離 2.5 公尺' : weapon().cost + ' 幣 / 發';
+    $('cost').textContent = knife ? '近戰距離 2.5 公尺' : economy.bet + ' 幣 / 發';
     $('scope-btn').hidden = !weapon().aimFov;
     const weaponIcon = $('weapon-icon');
     if (weaponIcon.dataset.weapon !== economy.weapon) {
@@ -536,7 +540,7 @@ async function boot() {
           '</small><span class="spec">' +
           w.damage +
           ' 傷害　/　' +
-          (id === 'knife' ? '近戰 2.5 公尺' : w.cost + ' 幣每發') +
+          (id === 'knife' ? '近戰 2.5 公尺' : economy.bet + ' 幣每發') +
           '</span></div><button data-buy="' +
           id +
           '" ' +
@@ -562,6 +566,21 @@ async function boot() {
     else setMode(shopReturn);
   }
   $('shop-btn').onclick = openShop;
+  function setBet(value) {
+    if (mode !== 'home') return;
+    const amount = Number(value);
+    if (String(value).trim() && Number.isInteger(amount) && amount >= 1 && amount <= 1000) {
+      economy.bet = amount;
+    } else notice('BET 請輸入 1–1,000 的整數');
+    sync();
+  }
+  $('bet-minus').onclick = () => setBet(economy.bet - 1);
+  $('bet-plus').onclick = () => setBet(economy.bet + 1);
+  $('bet-amount').onchange = (e) => setBet(e.target.value);
+  $('bet-amount').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') e.currentTarget.blur();
+  });
   $('close-shop').onclick = closeShop;
   $('deploy').onclick = deploy;
   $('shop').addEventListener('click', (e) => {
@@ -867,7 +886,11 @@ async function boot() {
       emit('weapon:swing', { weapon: 'knife' });
       return;
     }
-    if (reloadLeft > 0 || shotTime > 0 || mag() <= 0 || economy.wallet < weapon().cost) return;
+    if (reloadLeft > 0 || shotTime > 0 || mag() <= 0) return;
+    if (economy.wallet < economy.bet) {
+      notice('賞金不足，可回大廳調低 BET 或按 B 開啟商店整備');
+      return;
+    }
     camera.getWorldDirection(shotDirection);
     if (automatic) {
       if (!lock?.alive || !hunt.inSight(camera, lock, aim)) return;
@@ -875,7 +898,7 @@ async function boot() {
     }
     const hit = hunt.traceShot(camera.position, shotDirection);
     if (automatic && !hit.enemy) return;
-    const cost = weapon().cost;
+    const cost = economy.bet;
     economy.ammo[economy.weapon]--;
     economy.wallet -= cost;
     shotTime = weapon().delay - (economy.weapon === 'mg3' ? shotOverrun : 0);
@@ -902,7 +925,7 @@ async function boot() {
       }
     }
     sync();
-    if (economy.wallet < weapon().cost) notice('賞金不足，可按 B 開啟商店整備');
+    if (economy.wallet < economy.bet) notice('賞金不足，可回大廳調低 BET 或按 B 開啟商店整備');
   }
   const prizeOrigin = new T.Vector3();
   function damageEnemy(e, position) {
