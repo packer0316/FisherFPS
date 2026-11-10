@@ -868,7 +868,7 @@ async function boot() {
       if(e.code==='Escape'){e.preventDefault();closeAutoPlay();}return;
     }
     if(e.target instanceof HTMLInputElement)return;
-    if(mode==='play'&&/^(Key[WASDR]|Digit[1-5]|Space|ControlLeft|ControlRight|ShiftLeft|ShiftRight)$/.test(e.code)){stopAutoPlay(false);lockPointer();}
+    if(mode==='play'&&/^(Key[WASDRC]|Digit[1-5]|Space|ShiftLeft|ShiftRight)$/.test(e.code)){stopAutoPlay(false);lockPointer();}
     if (
       [
         'KeyW',
@@ -884,8 +884,7 @@ async function boot() {
         'Digit5',
         'Escape',
         'Space',
-        'ControlLeft',
-        'ControlRight',
+        'KeyC',
       ].includes(e.code)
     )
       e.preventDefault();
@@ -1000,7 +999,8 @@ async function boot() {
   }
   function movement(dt) {
     const control=pilot.enabled?pilot.controls:null;
-    const crouch = control?.crouch || touchCrouch || keys.has('ControlLeft') || keys.has('ControlRight');
+    // Crouch is C, not Ctrl: the browser closes the tab on Ctrl+W before the page can cancel it.
+    const crouch = control?.crouch || touchCrouch || keys.has('KeyC');
     const previousHeight = bodyHeight;
     const { ceiling: standLimit } = world.verticalLimits(player.x, player.z, feet, bodyHeight);
     const low = crouch || feet + standingHeight > standLimit + bodyHeight + 0.002;
