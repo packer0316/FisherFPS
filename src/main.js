@@ -8,6 +8,7 @@ import * as T from 'three';
 import { makeWorld, spawn } from './world.js';
 import { makeViewmodel, startingWeapon, weapons } from './weapons.js';
 import { makeLoadoutUI } from './loadout-ui.js';
+import { makeShopUI } from './shop-ui.js';
 import { normalizeLoadout, selectLoadout, slotWeapon } from './weapon-slots.js';
 import { makeEffects } from './effects.js';
 import { loadCombatParticles } from './combat-particles.js';
@@ -132,6 +133,7 @@ async function boot() {
     onClose(){loadoutUI.hide();setMode('home')},
     onChoose(id){if(selectLoadout(economy,id)){try{localStorage.setItem(loadoutStorage,JSON.stringify(economy.loadout))}catch{}equip(id);sync()}}
   });
+  const shopUI=makeShopUI({weapons,economy,onClose:closeShop});
   const grenade = makeGrenadeState(throwGrenade);
   // Every match starts with a full supply: 一般模式 entered from the lobby, and every BOSS
   // challenge including retries. Resuming from pause, the shop or a weapon switch keeps the count.
@@ -711,53 +713,18 @@ async function boot() {
       notice('移動速度 +35% · 持續 20 秒');
     }
   }
-  function stock() {
-    $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
-    $('stock').innerHTML = Object.entries(weapons)
-      .map(([id, w]) => {
-        const owned = economy.owned.has(id),
-          equipped = economy.weapon === id,
-          disabled = equipped || (!owned && economy.wallet < w.price);
-        const label = equipped
-          ? '裝備中'
-          : owned
-            ? '裝備'
-            : economy.wallet < w.price
-              ? '賞金不足'
-              : '購買　' + w.price;
-        return (
-          '<article class="stock">' +
-          gunIcon(id) +
-          '<div><h3>' +
-          w.name +
-          '</h3><small>' +
-          w.family +
-          (id === startingWeapon ? ' · 初始配發' : '') +
-          (id === 'grenade' ? ' · 剩餘 ' + economy.ammo.grenade + ' / 5 顆' : id === 'knife' ? ' · 配發' : ' · ' + w.mag + (id === 'mg3' ? ' 發彈箱' : ' 發彈匣')) +
-          '</small><span class="spec">' +
-          (id === 'grenade' ? '範圍機率擊倒 · 免費賞金' : id === 'knife' ? w.damage+' 近戰傷害 · 清怪不發幣' : economy.bet.toLocaleString('en-US')+' 幣 / 命中 · 打空退款') +
-          '</span></div><button data-buy="' +
-          id +
-          '" ' +
-          (disabled ? 'disabled' : '') +
-          '>' +
-          label +
-          '</button></article>'
-        );
-      })
-      .join('');
-    $('grant').hidden = economy.wallet >= 2;
-  }
+  function stock() { shopUI.render(); }
   function openShop() {
     if(world.playerLocked)return;
     if (mode === 'challenges' || mode === 'result' || mode === 'loadout') return;
     if (mode === 'shop') return closeShop();
     shopReturn = mode;
     setMode('shop');
-    stock();
+    shopUI.show();
     emit('shop:open');
   }
   function closeShop() {
+    shopUI.close(shopReturn !== 'play');
     if (shopReturn === 'play') deploy();
     else setMode(shopReturn);
   }
@@ -794,7 +761,7 @@ async function boot() {
     }
     if(selectLoadout(economy,id)){try{localStorage.setItem(loadoutStorage,JSON.stringify(economy.loadout))}catch{}}
     equip(id);
-    stock();
+    shopUI.chosen(id);
   });
   $('grant').onclick = () => {
     if (economy.wallet < 2) {

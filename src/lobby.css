@@ -1,11 +1,88 @@
-/* Lobby art is a single compressed image; animation only composites opacity/transforms. */
+/* Signal slices reuse the cached backdrop. Only opacity/transforms animate;
+   the noise, scanlines, filters and slice masks stay static. */
 #lobby {
-  --lobby-gold:#e9b773;--lobby-border:#d8d5bd35;
+  --lobby-gold:#cbb795;--lobby-border:#b5bdbb30;
   position:absolute;inset:62px 0 35px;z-index:5;isolation:isolate;overflow:auto;
   padding:clamp(24px,3.1vw,58px);background:#101619;scrollbar-width:thin;scrollbar-color:#8d785b #111719;
 }
-.lobby-atmosphere {position:fixed;inset:62px 0 35px;z-index:-1;overflow:hidden;pointer-events:none;background:#12181a;}
-.lobby-backdrop {width:100%;height:100%;object-fit:cover;object-position:50% 0;display:block;filter:saturate(.36) brightness(.79);opacity:.85;}
+.lobby-atmosphere {--lobby-image-position:50% 0;position:fixed;inset:62px 0 35px;z-index:-1;overflow:hidden;pointer-events:none;background:#12181a;}
+.lobby-signal {position:absolute;inset:0;animation:lobby-signal-dropout 6.4s steps(1,end) infinite,lobby-signal-shake 8.8s steps(1,end) infinite;animation-play-state:paused;}
+.lobby-backdrop {width:100%;height:100%;object-fit:cover;object-position:var(--lobby-image-position);display:block;filter:saturate(.36) brightness(.79);opacity:.85;}
+.lobby-signal:before,.lobby-signal:after,.lobby-signal-ghost {
+  content:'';position:absolute;inset:0;opacity:0;
+  background:url('/lobby/operator-lobby-v2.webp') var(--lobby-image-position) / cover no-repeat;
+  filter:saturate(.28) brightness(.92);
+  animation:12.8s steps(1,end) infinite;animation-play-state:paused;
+}
+.lobby-signal:before {clip-path:inset(32% 0 64%);animation-name:lobby-signal-tear-upper;}
+.lobby-signal:after {clip-path:inset(65% 0 32%);animation-name:lobby-signal-tear-lower;}
+.lobby-signal-ghost {animation-name:lobby-signal-echo;animation-duration:9.6s;filter:saturate(.24) brightness(.88);}
+.lobby-crt {position:absolute;inset:0;overflow:hidden;
+  background:repeating-linear-gradient(0deg,#0206091a 0 1px,transparent 1px 4px);}
+.lobby-crt:before {content:'';position:absolute;inset:-96px;opacity:.075;
+  background:url('/lobby/tv-static.svg') 0 0 / 96px 96px repeat;
+  animation:lobby-signal-static 6.4s steps(1,end) infinite;animation-play-state:paused;}
+.at-home #lobby:not([hidden]) .lobby-signal,
+.at-home #lobby:not([hidden]) .lobby-signal:before,
+.at-home #lobby:not([hidden]) .lobby-signal:after,
+.at-home #lobby:not([hidden]) .lobby-signal-ghost,
+.at-home #lobby:not([hidden]) .lobby-crt:before {animation-play-state:running;}
+@keyframes lobby-signal-dropout {
+  0%,13%,29%,36%,48%,54%,70%,90%,100% {opacity:1;}
+  10%,33% {opacity:.86;}
+  11.5% {opacity:.97;}
+  31%,67.5%,86% {opacity:.94;}
+  51% {opacity:.96;}
+  66% {opacity:.84;}
+  88% {opacity:.98;}
+}
+/* Shake is independent of signal loss, so lowering its frequency leaves
+   the flicker, tearing and ghosting cadence untouched. */
+@keyframes lobby-signal-shake {
+  0%,20.4%,50.4%,84.4%,100% {transform:translate3d(0,0,0);}
+  18% {transform:translate3d(-3px,0,0);}
+  19.1% {transform:translate3d(2px,0,0);}
+  48% {transform:translate3d(-2px,0,0);}
+  49.1% {transform:translate3d(1px,0,0);}
+  82% {transform:translate3d(3px,0,0);}
+  83.1% {transform:translate3d(-1px,0,0);}
+}
+@keyframes lobby-signal-tear-upper {
+  0%,12%,33.5%,67.5%,86.5%,100% {opacity:0;transform:translate3d(0,0,0);}
+  10% {opacity:.9;transform:translate3d(24px,0,0);}
+  11% {opacity:.6;transform:translate3d(-8px,0,0);}
+  31% {opacity:.8;transform:translate3d(-20px,0,0);}
+  32.5% {opacity:.45;transform:translate3d(9px,0,0);}
+  66% {opacity:.9;transform:translate3d(28px,0,0);}
+  85% {opacity:.65;transform:translate3d(-16px,0,0);}
+}
+@keyframes lobby-signal-tear-lower {
+  0%,13.5%,50.5%,69.5%,88.5%,100% {opacity:0;transform:translate3d(0,0,0);}
+  12% {opacity:.8;transform:translate3d(-28px,0,0);}
+  48% {opacity:.82;transform:translate3d(22px,0,0);}
+  49.5% {opacity:.45;transform:translate3d(-10px,0,0);}
+  68% {opacity:.72;transform:translate3d(-24px,0,0);}
+  87% {opacity:.85;transform:translate3d(18px,0,0);}
+}
+@keyframes lobby-signal-echo {
+  0%,9.5%,36%,68.5%,92%,100% {opacity:0;transform:translate3d(0,0,0);}
+  6% {opacity:.44;transform:translate3d(11px,0,0);}
+  7.5% {opacity:.2;transform:translate3d(-6px,0,0);}
+  32% {opacity:.38;transform:translate3d(-14px,0,0);}
+  33.5% {opacity:.16;transform:translate3d(5px,0,0);}
+  64% {opacity:.42;transform:translate3d(16px,0,0);}
+  66% {opacity:.22;transform:translate3d(7px,0,0);}
+  90% {opacity:.28;transform:translate3d(-10px,0,0);}
+}
+@keyframes lobby-signal-static {
+  0%,15%,36%,54%,71%,90%,100% {opacity:.075;transform:translate3d(0,0,0);}
+  10% {opacity:.21;transform:translate3d(-24px,0,0);}
+  12% {opacity:.12;transform:translate3d(31px,0,0);}
+  31% {opacity:.15;transform:translate3d(-13px,0,0);}
+  48% {opacity:.18;transform:translate3d(27px,0,0);}
+  66% {opacity:.21;transform:translate3d(42px,0,0);}
+  85% {opacity:.16;transform:translate3d(-32px,0,0);}
+}
 .lobby-atmosphere:after {
   content:'';position:absolute;inset:0;
   background:linear-gradient(90deg,#070e12c9 0%,#080f1266 25%,transparent 44%,#07101522 57%,#071015bb 78%,#071015ed),
@@ -32,7 +109,8 @@
 .lobby-eyebrow > span {height:4px;width:24px;background:var(--lobby-gold);transform:skewX(-28deg);box-shadow:7px 0 #e9b77345;}
 .lobby-version {font:10px/1 BarlowS,sans-serif;letter-spacing:.14em;color:#9aa5a2;border:1px solid #d5d3bf38;background:#0c141a80;padding:3px 6px 2px;margin-left:4px;}
 .lobby-heading h1 {line-height:0;margin:24px 0 19px;}
-.lobby-title-ink {position:relative;display:inline-block;max-width:100%;margin-left:-9px;vertical-align:top;}
+/* Offset the title artwork's transparent left gutter to align its ink with the copy. */
+.lobby-title-ink {position:relative;display:inline-block;max-width:100%;transform:translateX(-4.4%);vertical-align:top;}
 .lobby-brush-title {display:block;width:clamp(300px,28vw,455px);max-width:100%;height:auto;opacity:0;}
 /* Reuse the original image's alpha, so recoloring never changes the brushwork.
    The two rows have a transparent gap at y=454..457 in the 887 px source. */
@@ -59,58 +137,66 @@
 .lobby-section-title > span {font:10px BarlowS,sans-serif;letter-spacing:.17em;color:#8d9a9b;}
 .lobby-modes {display:grid;gap:13px;}
 .lobby-card {
-  --card-accent:#e9b773;position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;
+  --card-accent:#bfc7c0;position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;
   min-width:0;min-height:183px;padding:18px 20px 0;text-align:left;color:#f1f1e7;
-  border:1px solid #b6b8a653;border-radius:0;background:#111b20;box-shadow:0 14px 30px #0005;
-  transition:border-color .2s,transform .2s,box-shadow .2s;
+  border:1px solid #aeb7b480;border-radius:2px;background:#141a1d;
+  box-shadow:inset 0 1px #ffffff08,0 2px 5px #0003;
+  transition:border-color .14s,box-shadow .14s;
 }
-.lobby-card:before {content:'';position:absolute;inset:0;z-index:3;pointer-events:none;
-  background:linear-gradient(var(--card-accent),var(--card-accent)) left top/26px 2px no-repeat,
-    linear-gradient(var(--card-accent),var(--card-accent)) left top/2px 19px no-repeat,
-    linear-gradient(var(--card-accent),var(--card-accent)) right bottom/26px 2px no-repeat;
-  opacity:.8;}
 .lobby-card:after {content:'';position:absolute;inset:0;z-index:-1;
-  background:linear-gradient(90deg,#0e1518eb 4%,#10191ab3 37%,#10191a15 85%),linear-gradient(0deg,#0c1316f5 6%,#0d16194d 72%,#0c131677);}
-.lobby-scene {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-3;object-position:50% 40%;filter:saturate(.72);transition:transform .65s;}
-.hunt-card {border-color:#c8ab7680;}
+  background:linear-gradient(90deg,#101619f0 4%,#101619b3 40%,#10161926 85%),linear-gradient(0deg,#101619f2 5%,#10161933 80%);}
+.lobby-scene {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-3;object-position:50% 40%;filter:saturate(.45) brightness(.86);}
 .hunt-card .lobby-scene {object-position:72% 40%;}
-.lobby-card-top {display:flex;justify-content:space-between;align-items:center;gap:10px;font:11px BarlowC,sans-serif;letter-spacing:.12em;color:#d7c7a6;position:relative;z-index:2;}
+.lobby-card-top {display:flex;justify-content:space-between;align-items:center;gap:10px;font:11px BarlowS,sans-serif;letter-spacing:.10em;color:#b8bdb6;position:relative;z-index:2;}
 .lobby-card-top > span:first-child i {font-style:normal;color:#939d97;margin:0 4px;}
-.lobby-tag {font:9px Arial,'Microsoft JhengHei',sans-serif;color:#d6dcd2;border:1px solid #d5d3bf40;background:#0c141ab3;padding:4px 7px;white-space:nowrap;letter-spacing:.06em;}
+.lobby-tag {font:10px Arial,'Microsoft JhengHei',sans-serif;color:#c1c6be;background:#101619b3;padding:4px 7px;white-space:nowrap;letter-spacing:.04em;}
 .lobby-card-copy {display:flex;flex-direction:column;gap:7px;position:relative;z-index:2;padding:20px 0 17px;margin-top:auto;}
-.lobby-card-copy strong {font-size:29px;letter-spacing:.06em;line-height:1.15;text-shadow:0 2px 12px #000c;}
+.lobby-card-copy strong {font-size:28px;letter-spacing:.035em;line-height:1.15;text-shadow:0 1px 3px #0006;}
 .lobby-card-copy > span {font-size:11px;line-height:1.6;color:#c2c8c1;}
 .lobby-card-action {display:flex;align-items:center;justify-content:space-between;position:relative;z-index:2;
-  margin:0 -20px;padding:10px 20px;background:#ac7d3d24;border-top:1px solid #d1a26940;color:#efd09a;font-size:11px;letter-spacing:.12em;}
-.hunt-card .lobby-card-action {background:linear-gradient(90deg,#f2c37e,#d59b52);color:#201a12;border-top-color:#ffdf9b;}
+  margin:0 -20px;padding:11px 20px;background:#171f23ed;border-top:1px solid #c8cfca26;color:#d5d9d2;font-size:12px;letter-spacing:.06em;
+  box-shadow:inset 0 1px #ffffff04;transition:background .14s,color .14s;}
+.boss-card .lobby-card-action {background:#c5b18d;color:#171c1d;border-top-color:#e0cfaf;box-shadow:inset 0 1px #f3eddb30;}
 .lobby-card-action b {font-weight:700;}
-.lobby-card-action > i {width:19px;height:19px;transition:transform .2s;}
-.boss-card {--card-accent:#bd8585;min-height:198px;border-color:#aa939952;}
-.boss-card:after {background:linear-gradient(90deg,#11151bec 1%,#1319206b 45%,transparent 90%),linear-gradient(0deg,#0c1316 5%,#0e151a99 50%,#0c131630);}
-.boss-card .lobby-card-top {color:#c7afb2;}
+.lobby-card-action > i {width:17px;height:17px;transition:transform .14s;}
+.boss-card {--card-accent:#e1c99f;min-height:198px;border-color:#cab18deb;}
+.boss-card .lobby-card-top {color:#d0c1a6;}
+.boss-card:after {background:linear-gradient(90deg,#11181eee 1%,#131b206b 45%,transparent 90%),linear-gradient(0deg,#101619 5%,#10161999 50%,#10161930);}
 .boss-card .lobby-card-copy {padding-top:28px;}
-.boss-card .lobby-card-action {color:#e6c3bd;background:#533b3c69;border-top-color:#c8998f35;}
 .lobby-boss-art {position:absolute;inset:9px -7px 18px 90px;z-index:-2;pointer-events:none;}
-.lobby-boss-art img {position:absolute;object-fit:contain;filter:drop-shadow(0 4px 7px #000a);}
+.lobby-boss-art img {position:absolute;object-fit:contain;filter:saturate(.6) drop-shadow(0 3px 4px #0008);}
 .lobby-boss-warden {width:40%;height:90%;left:2%;top:5%;}
 .lobby-boss-bride {width:52%;height:121%;left:22%;top:-2%;}
 .lobby-boss-stationmaster {width:48%;height:94%;right:-2%;top:4%;}
-.lobby-card:hover {transform:translateX(-4px);border-color:var(--card-accent);box-shadow:0 12px 32px #0007,0 0 18px #e9b7730b;}
-.lobby-card:hover .lobby-scene {transform:scale(1.05);}
-.lobby-card:hover .lobby-card-action > i {transform:translateX(3px);}
-.lobby-card:focus-visible {outline:2px solid #ffe0a6;outline-offset:4px;}
-.lobby-card:active {transform:translateX(-2px);}
-.lobby-bet {border:1px solid #acb3a52b;background:linear-gradient(120deg,#1a252adf,#0d171ded);padding:15px 16px 12px;}
+.lobby-card:focus-visible {outline:2px solid #e5e2d7;outline-offset:3px;border-color:var(--card-accent);}
+.lobby-card:focus-visible .lobby-card-action {background:#2d373b;color:#f2f1e9;}
+.boss-card:focus-visible .lobby-card-action {background:#d9c7a5;color:#171c1d;}
+@media(hover:hover) {
+  .lobby-card:hover {border-color:var(--card-accent);box-shadow:inset 0 1px #ffffff12,0 2px 5px #0003;}
+  .lobby-card:hover .lobby-card-action {background:#2d373b;color:#f2f1e9;}
+  .boss-card:hover .lobby-card-action {background:#d9c7a5;color:#171c1d;}
+  .lobby-card:hover .lobby-card-action > i {transform:translateX(2px);}
+}
+.lobby-card:active {box-shadow:inset 0 2px 5px #0005;}
+.lobby-card:active .lobby-card-action {background:#10171a;box-shadow:inset 0 2px 3px #0006;}
+.boss-card:active .lobby-card-action {background:#ab9877;color:#101516;}
+.lobby-card:active .lobby-card-action > i {transform:translateY(1px);}
+.lobby-bet {border:1px solid #b0bbb22b;background:#11191dea;box-shadow:inset 0 1px #ffffff05;padding:15px 16px 12px;}
 .bet-setting {display:flex;gap:12px;justify-content:space-between;align-items:center;}
 .bet-setting label {font-size:11px;letter-spacing:.1em;color:#e1e5d9;flex-shrink:0;}
-.bet-setting label small {display:block;font:12px BarlowC,sans-serif;letter-spacing:.16em;color:var(--lobby-gold);margin-bottom:3px;}
-.bet-controls {display:flex;align-items:stretch;gap:4px;min-width:0;}
-.bet-controls button {height:40px;width:35px;padding:0;border:1px solid #b7a37c4d;border-radius:0;background:#aa8d5620;color:#efc990;font-size:22px;flex-shrink:0;transition:background .18s;}
-.bet-controls button:hover:not(:disabled) {background:#aa8d5645;border-color:#d7b882;}
-.bet-controls button:active:not(:disabled) {background:#b7985d60;}
-.bet-controls button:disabled {opacity:.3;}
-.bet-value {display:flex;align-items:center;background:#090f13c9;border:1px solid #c5c1a833;min-width:0;}
-.bet-value input {width:118px;min-width:0;height:38px;padding:0 3px 0 7px;border:0;border-radius:0;outline-offset:2px;background:transparent;color:#f1e6cf;font:27px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;}
+.bet-setting label small {display:block;font:12px BarlowS,sans-serif;letter-spacing:.13em;color:#a2b0ac;margin-bottom:3px;}
+.bet-controls {display:flex;align-items:stretch;gap:0;min-width:0;border:1px solid #b7c2b580;border-radius:2px;background:#0a1014;box-shadow:inset 0 1px 3px #0006;}
+.bet-controls button {display:grid;place-items:center;height:42px;width:38px;padding:0;border:0;border-radius:0;background:#222b2fe6;color:#d9dbd3;flex-shrink:0;transition:background .12s,color .12s,box-shadow .12s;}
+.bet-controls button > svg {width:16px;height:16px;pointer-events:none;}
+.bet-controls button:first-child {border-right:1px solid #909d9633;}
+.bet-controls button:last-child {border-left:1px solid #909d9633;}
+.bet-controls button:focus-visible {position:relative;z-index:1;outline:2px solid #e5e2d7;outline-offset:2px;}
+@media(hover:hover) {.bet-controls button:hover:not(:disabled) {background:#364145;color:#fff;}}
+.bet-controls button:active:not(:disabled) {background:#10171a;box-shadow:inset 0 2px 4px #0008;}
+.bet-controls button:disabled {color:#66736f;background:#141c20;opacity:.55;}
+.bet-value {display:flex;align-items:center;min-width:0;}
+.bet-value input {width:118px;min-width:0;height:42px;padding:0 3px 0 7px;border:0;border-radius:0;outline-offset:-2px;background:transparent;color:#e9e9df;font:26px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;}
+.bet-value input:focus-visible {outline:2px solid #e5e2d7;}
 .bet-value span {font-size:9px;color:#94a09a;white-space:nowrap;margin-right:7px;}
 .bet-details {display:flex;justify-content:space-between;gap:6px;margin-top:11px;padding-top:9px;border-top:1px solid #c5c1a819;align-items:flex-start;}
 .bet-details p {font-size:9px;color:#b4bdb7;line-height:1.7;margin:0;}
@@ -138,8 +224,15 @@
 .at-home header {background:linear-gradient(90deg,#10191ef5,#131d22f5);border-bottom:1px solid #a99e7c3d;box-shadow:0 4px 20px #0004;}
 .at-home .brand b {letter-spacing:1.7px;}
 .at-home .mode {color:#b5bfb6;}
-.at-home #shop-btn {border-radius:0;border-color:#c6a16a77;background:linear-gradient(120deg,#6d54374d,#483c2940);}
-.at-home #autoplay-btn {border-radius:0;border-color:#acb5a83b;background:#1b272a88;color:#c9d1c5;}
+.at-home #shop-btn,.at-home #autoplay-btn {height:36px;border-radius:2px;border-color:#a7b4ae80;background:#1b2428;color:#d4d9d1;
+  box-shadow:inset 0 1px #ffffff06;transition:background .12s,border-color .12s,box-shadow .12s;}
+.at-home .top-actions kbd {color:#9daaa5;border-color:#82928a40;border-radius:2px;}
+.at-home .top-actions button:focus-visible {outline-color:#e5e2d7;outline-offset:3px;}
+@media(hover:hover) {
+  .at-home #shop-btn:hover,.at-home #autoplay-btn:hover {background:#2d373b;border-color:#c4cec2;}
+  .at-home .top-actions .icon-button:hover {background:#ffffff0d;color:#eceee6;}
+}
+.at-home #shop-btn:active,.at-home #autoplay-btn:active {background:#10171b;box-shadow:inset 0 2px 4px #0007;}
 .at-home footer {background:#0c151bf2;border-top-color:#a99e7c35;color:#8d9d95;}
 .at-home #world,.at-home .vignette {visibility:hidden;}
 .paused #brief {left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);width:min(370px,88vw);z-index:11;padding:25px;}
@@ -168,7 +261,7 @@
   .lobby-content {grid-template-columns:minmax(0,1fr) 360px;column-gap:24px;}
   .lobby-brush-title {width:310px;}
   .lobby-heading p {font-size:11px;letter-spacing:.04em;}
-  .lobby-backdrop {object-position:35% 0;}
+  .lobby-atmosphere {--lobby-image-position:35% 0;}
   .lobby-loadout {width:300px;}
 }
 @media(max-width:760px), (max-height:550px) {
@@ -180,11 +273,11 @@
   .lobby-heading {min-height:220px;padding:5px 0 0;}
   .lobby-heading h1 {margin:14px 0 14px;}
   .lobby-brush-title {width:280px;}
-  .lobby-title-ink {margin-left:-6px;}
   .lobby-eyebrow {font-size:10px;letter-spacing:.17em;}
   .lobby-heading p {font-size:11px;letter-spacing:.04em;max-width:220px;}
   .lobby-field-label {margin-top:19px;font-size:9px;}
-  .lobby-backdrop {object-fit:cover;object-position:45% top;height:560px;}
+  .lobby-atmosphere {--lobby-image-position:45% top;}
+  .lobby-signal {height:560px;}
   .lobby-atmosphere:after {background:linear-gradient(90deg,#0710159e,transparent 80%),linear-gradient(0deg,#0b141a 5%,#0b141af0 30%,transparent 75%);}
   .lobby-deployment {align-self:stretch;gap:13px;}
   .lobby-account {padding:13px 0;border-top:1px solid var(--lobby-border);}
@@ -192,8 +285,8 @@
   .boss-card {min-height:184px;}
   .lobby-bet {padding:13px 12px 11px;}
   .bet-setting {gap:7px;}
-  .bet-controls button {width:35px;height:42px;}
-  .bet-value input {width:110px;height:40px;font-size:25px;}
+  .bet-controls button {width:44px;height:44px;}
+  .bet-value input {width:104px;height:44px;font-size:25px;}
   .bet-value span {font-size:8px;margin-right:5px;}
   .bet-details {gap:4px;}
   .bet-details p {font-size:9px;}
@@ -208,8 +301,8 @@
   .lobby-brush-title {width:270px;}
   .lobby-card {padding-inline:16px;}
   .lobby-card-action {margin-inline:-16px;padding-inline:16px;}
-  .bet-controls button {width:31px;}
-  .bet-value input {width:108px;}
+  .bet-controls button {width:40px;}
+  .bet-value input {width:95px;}
   .bet-details {flex-direction:column;}
 }
 @media(max-height:550px) and (min-width:621px) {
@@ -244,8 +337,8 @@
   .bet-setting {gap:6px;}
   .bet-setting label {font-size:9px;letter-spacing:0;}
   .bet-setting label small {font-size:10px;margin-bottom:2px;}
-  .bet-controls button {height:34px;width:30px;font-size:19px;}
-  .bet-value input {height:32px;width:106px;font-size:24px;}
+  .bet-controls button {height:40px;width:36px;}
+  .bet-value input {height:40px;width:100px;font-size:24px;}
   .bet-value span {font-size:8px;}
   .bet-details {margin-top:6px;padding-top:5px;}
   .bet-details p {font-size:8px;}
@@ -261,10 +354,13 @@
   #lobby-armory > span {gap:3px;}
   #lobby-armory b {font-size:9px;margin-top:0;}
   .lobby-field-note {display:none;}
-  .lobby-backdrop {height:100%;object-position:35% top;}
+  .lobby-atmosphere {--lobby-image-position:35% top;}
+  .lobby-signal {height:100%;}
   .lobby-atmosphere:after {background:linear-gradient(90deg,#071015bb,transparent 40%,#071015e6 85%),linear-gradient(0deg,#071015b3,transparent 65%);}
 }
 @media(prefers-reduced-motion:reduce) {
+  .lobby-signal,.lobby-signal:before,.lobby-signal:after,.lobby-signal-ghost,.lobby-crt:before {animation:none;}
+  .lobby-crt:before {opacity:.04;}
   .lobby-haze,.lobby-dust {animation:none;}
-  .lobby-card,.lobby-scene,.lobby-card-action > i,#lobby-armory {transition:none;}
+  .lobby-card,.lobby-card-action,.lobby-card-action > i,.bet-controls button,.at-home #shop-btn,.at-home #autoplay-btn,#lobby-armory {transition:none;}
 }

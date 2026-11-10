@@ -190,7 +190,9 @@ function makeAudio() {
     }
   }
 
-  // Ambience beds: two overlapping voices with equal-power fades hide the loop point.
+  // Ambience beds loop forever: overlapping voices with crossfades hide the loop point.
+  // Each voice is scheduled on the AudioContext clock while the one before it still plays,
+  // so a late timer (an arena loading on the main thread) never opens a gap.
   let bed = null;
   function loop(name, volume = 1, crossfade = 3) {
     if (bed?.name === name) { bed.volume = volume; return; }
@@ -201,27 +203,37 @@ function makeAudio() {
     load(name).then(buffer => {
       if (!buffer || bed !== current) return;
       const span = buffer.duration - crossfade - 0.1;
-      const next = first => {
-        if (bed !== current) return;
-        if (ctx.state === 'running') {
-          const source = ctx.createBufferSource();
-          source.buffer = buffer;
-          const gain = ctx.createGain();
-          const t = ctx.currentTime;
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(current.volume, t + (first ? 1.2 : crossfade));
-          gain.gain.setValueAtTime(current.volume, t + span);
-          gain.gain.linearRampToValueAtTime(0, t + span + crossfade);
-          source.connect(gain).connect(bus.ambience);
-          source.start(t, 0.05);
-          source.stop(t + span + crossfade + 0.05);
-          const voice = { source, gain };
-          current.voices.push(voice);
-          source.onended = () => { current.voices.splice(current.voices.indexOf(voice), 1); gain.disconnect(); };
-          current.timer = setTimeout(() => next(false), span * 1000);
-        } else current.timer = setTimeout(() => next(first), 400);
+      const add = (t, fadeIn) => {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        const gain = ctx.createGain();
+        gain.gain.value = 0; // a queued voice cancelled before it starts stays silent
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(current.volume, t + fadeIn);
+        gain.gain.setValueAtTime(current.volume, t + span);
+        gain.gain.linearRampToValueAtTime(0, t + span + crossfade);
+        source.connect(gain).connect(bus.ambience);
+        source.start(t, 0.05);
+        source.stop(t + span + crossfade + 0.05);
+        const voice = { source, gain };
+        current.voices.push(voice);
+        source.onended = () => {
+          const i = current.voices.indexOf(voice);
+          if (i >= 0) current.voices.splice(i, 1);
+          gain.disconnect();
+        };
       };
-      next(true);
+      let next = -Infinity; // start time of the next voice to queue
+      const queue = () => {
+        if (bed !== current) return;
+        if (ctx.state !== 'running') { current.timer = setTimeout(queue, 400); return; }
+        // First voice, or the timer was so late the queue ran dry: fade in from now.
+        if (next < ctx.currentTime) { add(ctx.currentTime, 1.2); next = ctx.currentTime + span; }
+        if (next - ctx.currentTime < span + 1) { add(next, crossfade); next += span; }
+        // Wake when the queued voice begins, and queue the one after it.
+        current.timer = setTimeout(queue, Math.max(1, next - span - ctx.currentTime) * 1000);
+      };
+      queue();
     });
   }
   function fadeVoice(voice, seconds) {

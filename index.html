@@ -146,8 +146,9 @@
       </footer>
       <section id="lobby" aria-labelledby="lobby-title" hidden>
         <div class="lobby-atmosphere" aria-hidden="true">
-          <img class="lobby-backdrop" src="/lobby/operator-lobby-v2.webp" alt="" width="1672" height="941" fetchpriority="high" draggable="false">
+          <div class="lobby-signal"><img class="lobby-backdrop" src="/lobby/operator-lobby-v2.webp" alt="" width="1672" height="941" fetchpriority="high" draggable="false"><div class="lobby-signal-ghost"></div></div>
           <div class="lobby-haze"></div><div class="lobby-dust"></div>
+          <div class="lobby-crt"></div>
         </div>
         <div class="lobby-content">
           <div class="lobby-heading">
@@ -163,12 +164,6 @@
             </div>
             <div class="lobby-section-title"><h2>選擇作戰模式</h2><span>SELECT OPERATION</span></div>
             <div class="lobby-modes" aria-label="遊戲模式">
-              <button id="mode-normal" class="lobby-card hunt-card">
-                <img class="lobby-scene" src="/hunt-briefing.webp" alt="" width="960" height="540">
-                <span class="lobby-card-top"><span>01 <i>/</i> DUST BAZAAR</span><span class="lobby-tag">自由獵殺</span></span>
-                <span class="lobby-card-copy"><strong>一般模式</strong><span>深入沙境街巷，獵殺殭屍，收集賞金。</span></span>
-                <span class="lobby-card-action"><b>進入獵場</b><i data-icon="arrow"></i></span>
-              </button>
               <button id="mode-boss" class="lobby-card boss-card">
                 <img class="lobby-scene" src="/lobby/boss-hall.webp" alt="" width="1536" height="1024">
                 <span class="lobby-boss-art" aria-hidden="true">
@@ -176,17 +171,23 @@
                   <img class="lobby-boss-bride" src="/castle/bride-victory.png" alt="" width="600" height="760">
                   <img class="lobby-boss-stationmaster" src="/autoplay/stationmaster.webp" alt="" width="256" height="256">
                 </span>
-                <span class="lobby-card-top"><span>02 <i>/</i> SPECIAL ENCOUNTERS</span><span class="lobby-tag">3 場挑戰</span></span>
+                <span class="lobby-card-top"><span>01 <i>/</i> SPECIAL ENCOUNTERS</span><span class="lobby-tag">3 場挑戰</span></span>
                 <span class="lobby-card-copy"><strong>BOSS 挑戰</strong><span>典獄長 · 鬼新娘 · 站長</span></span>
                 <span class="lobby-card-action"><b>選擇 BOSS</b><i data-icon="arrow"></i></span>
+              </button>
+              <button id="mode-normal" class="lobby-card hunt-card">
+                <img class="lobby-scene" src="/hunt-briefing.webp" alt="" width="960" height="540">
+                <span class="lobby-card-top"><span>02 <i>/</i> DUST BAZAAR</span><span class="lobby-tag">自由獵殺</span></span>
+                <span class="lobby-card-copy"><strong>一般模式</strong><span>深入沙境街巷，獵殺殭屍，收集賞金。</span></span>
+                <span class="lobby-card-action"><b>進入獵場</b><i data-icon="arrow"></i></span>
               </button>
             </div>
             <div class="lobby-bet">
               <div class="bet-setting"><label for="bet-amount"><small>BET</small>單發金額</label>
                 <div class="bet-controls">
-                  <button id="bet-minus" type="button" aria-label="減少單發金額">−</button>
+                  <button id="bet-minus" type="button" aria-label="減少單發金額"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 8h10"/></svg></button>
                   <div class="bet-value"><input id="bet-amount" type="text" value="10,000" inputmode="numeric" autocomplete="off" maxlength="9" aria-describedby="bet-help bet-range"><span>幣 / 發</span></div>
-                  <button id="bet-plus" type="button" aria-label="增加單發金額">+</button>
+                  <button id="bet-plus" type="button" aria-label="增加單發金額"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 8h10M8 3v10"/></svg></button>
                 </div>
               </div>
               <div class="bet-details"><p id="bet-help">命中才扣款，獎金隨 BET 放大。<span>射擊理論 RTP 97%；免費手榴彈另計。</span></p><small id="bet-range">1–1,000,000 幣</small></div>
@@ -229,21 +230,30 @@
         </section>
       </div>
       <div id="shop" class="overlay" hidden>
-        <section class="shop-window">
+        <section class="shop-window" role="dialog" aria-modal="true" aria-labelledby="shop-title">
           <div class="shop-head">
             <div>
               <div class="operation"><span></span> FIELD ARMORY</div>
-              <h2>軍械商店</h2>
+              <h2 id="shop-title">軍械商店</h2>
+            </div>
+            <div class="shop-wallet">
+              <span><i data-icon="coin"></i> 可用賞金</span><b id="shop-balance"></b>
             </div>
             <button id="close-shop" class="icon-button" aria-label="關閉商店">
               <i data-icon="close"></i>
             </button>
           </div>
-          <div class="shop-wallet">
-            <span><i data-icon="coin"></i> 可用賞金</span><b id="shop-balance"></b>
+          <div id="shop-categories" role="tablist" aria-label="軍械分類"></div>
+          <div class="shop-catalog" id="shop-panel" role="tabpanel" aria-labelledby="shop-tab-rifle">
+            <div class="shop-section-head"><div><h3 id="shop-category-title"></h3><p id="shop-category-description"></p></div><span id="shop-count"></span></div>
+            <div id="stock"></div>
           </div>
-          <div id="stock"></div>
-          <button id="grant" hidden>領取補給金 +100</button>
+          <div class="shop-footer">
+            <div class="shop-current"><small>目前使用</small><strong id="shop-equipped"></strong></div>
+            <button id="grant" hidden>領取補給金 +100</button>
+            <button id="shop-done" type="button">完成整備 <kbd>ESC</kbd></button>
+          </div>
+          <span id="shop-status" class="shop-sr-only" role="status" aria-live="polite"></span>
         </section>
       </div>
       <div id="autoplay-menu" class="overlay" hidden>

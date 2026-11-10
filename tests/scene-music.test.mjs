@@ -5,7 +5,8 @@ import { makeSceneMusic, MUSIC_VOLUME, FADE_OUT, LOOP_FADE } from '../src/scene-
 const tracks = { lobby: 'lobby.mp3', warden: 'prison.mp3', bride: 'castle.mp3' };
 const settle = () => new Promise((r) => setImmediate(r));
 
-function fakeEnv({ duration = 60 } = {}) {
+// running: Chrome creates a context inside a user gesture already running.
+function fakeEnv({ duration = 60, running = false } = {}) {
   const listeners = new Map(), sources = [], contexts = [], fetched = [], gains = [];
   const param = (value) => ({
     value, target: value,
@@ -14,7 +15,9 @@ function fakeEnv({ duration = 60 } = {}) {
     setValueCurveAtTime() {},
   });
   class FakeContext {
-    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; contexts.push(this); }
+    constructor() { this.state = running ? 'running' : 'suspended'; this.born = Date.now(); this.destination = {}; contexts.push(this); }
+    // Follows Date, so tests that mock Date move the audio clock with their timers.
+    get currentTime() { return (Date.now() - this.born) / 1000; }
     resume() { this.state = 'running'; return Promise.resolve(); }
     suspend() { this.state = 'suspended'; return Promise.resolve(); }
     decodeAudioData(data) { return Promise.resolve({ duration, url: data.url }); }
@@ -38,18 +41,21 @@ function fakeEnv({ duration = 60 } = {}) {
     clearTimeout: (id) => clearTimeout(id),
   };
   const gesture = async () => { listeners.get('pointerdown')?.(); await settle(); await settle(); };
-  const playing = () => sources.filter((s) => !s.stopped).map((s) => s.buffer.url);
+  // Tracks with an unstopped pass; the next pass of a looping track is already queued.
+  const playing = () => [...new Set(sources.filter((s) => !s.stopped).map((s) => s.buffer.url))];
   return { env, sources, contexts, fetched, gains, listeners, gesture, playing };
 }
 
-test('nothing plays before a user gesture; the lobby track starts after one', async () => {
-  const { env, contexts, gesture, playing } = fakeEnv();
-  const music = makeSceneMusic(tracks, { env, keep: ['lobby'] });
-  music.play('lobby');
-  assert.equal(contexts.length, 0, 'no AudioContext before a gesture');
-  await gesture();
-  assert.deepEqual(playing(), ['lobby.mp3']);
-});
+for (const running of [false, true]) {
+  test(`nothing plays before a user gesture; the lobby track starts after one (context starts ${running ? 'running' : 'suspended'})`, async () => {
+    const { env, contexts, gesture, playing } = fakeEnv({ running });
+    const music = makeSceneMusic(tracks, { env, keep: ['lobby'] });
+    music.play('lobby');
+    assert.equal(contexts.length, 0, 'no AudioContext before a gesture');
+    await gesture();
+    assert.deepEqual(playing(), ['lobby.mp3']);
+  });
+}
 
 test('entering a boss arena fades the lobby out and the boss track in', async () => {
   mock.timers.enable({ apis: ['setTimeout'] });
@@ -97,27 +103,46 @@ test('returning mid-fade keeps the same voice instead of restarting the track', 
     mock.timers.tick(FADE_OUT * 500);
     music.play('lobby');
     mock.timers.tick(FADE_OUT * 1000);
-    assert.equal(sources.length, 1);
-    assert.equal(sources[0].stopped, false);
+    assert.equal(sources.length, 2, 'the playing pass and the next one queued, nothing restarted');
+    assert.ok(sources.every((s) => !s.stopped));
   } finally {
     mock.timers.reset();
   }
 });
 
-test('each loop pass starts LOOP_FADE seconds before the previous one ends', async () => {
-  mock.timers.enable({ apis: ['setTimeout'] });
+test('the track loops forever: each pass is queued ahead and starts LOOP_FADE seconds before the previous one ends', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   try {
     const { env, sources, gesture } = fakeEnv({ duration: 30 });
     const music = makeSceneMusic(tracks, { env });
     music.play('bride');
     await gesture();
-    assert.equal(sources.length, 1);
-    mock.timers.tick(30 * 1000);
-    assert.equal(sources.length, 2);
-    assert.ok(Math.abs(sources[1].startedAt - (sources[0].startedAt + 30 - LOOP_FADE)) < 1e-9);
+    assert.equal(sources.length, 2, 'the second pass waits queued from the start');
+    mock.timers.tick(20); // the first pass starts 20 ms after the call
+    for (let pass = 2; pass < 12; pass++) {
+      mock.timers.tick((30 - LOOP_FADE) * 1000);
+      assert.equal(sources.length, pass + 1, 'once a pass begins, the one after it is queued');
+    }
+    for (let i = 1; i < sources.length; i++) {
+      assert.ok(Math.abs(sources[i].startedAt - (sources[i - 1].startedAt + 30 - LOOP_FADE)) < 1e-9);
+      assert.ok(Math.abs(sources[i - 1].stopAt - (sources[i - 1].startedAt + 30)) < 1e-9);
+    }
   } finally {
     mock.timers.reset();
   }
+});
+
+test('a timer that fires late still finds the next pass already scheduled', async () => {
+  const { env, sources, gesture } = fakeEnv({ duration: 30 });
+  let wake = null;
+  env.setTimeout = (fn) => { wake = fn; return 0; }; // held back until called by hand
+  const music = makeSceneMusic(tracks, { env });
+  music.play('bride');
+  await gesture();
+  // The main thread stalls through the whole crossfade: the next pass still starts on time.
+  assert.equal(sources.length, 2);
+  assert.ok(Math.abs(sources[1].startedAt - (sources[0].startedAt + 30 - LOOP_FADE)) < 1e-9);
+  assert.equal(typeof wake, 'function');
 });
 
 test('boss tracks are dropped from memory after they stop; kept tracks are not', async () => {
@@ -155,15 +180,17 @@ test('the music follows the game mute switch after a click', async () => {
   assert.equal(master.gain.target, MUSIC_VOLUME);
 });
 
-test('a first click that leaves the lobby never starts the music', async () => {
-  const { env, sources, gesture } = fakeEnv();
-  const music = makeSceneMusic(tracks, { env });
-  music.play('lobby');
-  const pending = gesture();
-  music.play(null);
-  await pending;
-  assert.equal(sources.length, 0);
-});
+for (const running of [false, true]) {
+  test(`a first click that leaves the lobby never starts the music (context starts ${running ? 'running' : 'suspended'})`, async () => {
+    const { env, sources, gesture } = fakeEnv({ running });
+    const music = makeSceneMusic(tracks, { env });
+    music.play('lobby');
+    const pending = gesture();
+    music.play(null);
+    await pending;
+    assert.equal(sources.length, 0);
+  });
+}
 
 test('prepare downloads before audio unlocks and decodes after, so play starts at once', async () => {
   const { env, contexts, fetched, gesture, playing } = fakeEnv();

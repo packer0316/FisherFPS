@@ -55,6 +55,8 @@ export function makeSceneMusic(tracks, { muted = () => false, keep = [], env = g
     }
     if (ctx.state === 'running') {
       for (const type of gestures) env.removeEventListener(type, unlock, true);
+      // Chrome creates a context inside a gesture already running, so no resume() follows.
+      sync();
       return;
     }
     if (!hidden) ctx.resume().then(sync, () => {});
@@ -85,7 +87,7 @@ export function makeSceneMusic(tracks, { muted = () => false, keep = [], env = g
     const track = { name, level: ctx.createGain(), voices: new Set(), timer: 0, stopTimer: 0 };
     track.level.gain.value = 0;
     track.level.connect(master);
-    const overlap = Math.min(LOOP_FADE, buffer.duration / 4);
+    const overlap = Math.min(LOOP_FADE, buffer.duration / 4), period = buffer.duration - overlap;
     const pass = (when, first) => {
       const source = ctx.createBufferSource(), gain = ctx.createGain();
       source.buffer = buffer;
@@ -97,11 +99,17 @@ export function makeSceneMusic(tracks, { muted = () => false, keep = [], env = g
       source.stop(end);
       track.voices.add(source);
       source.onended = () => { track.voices.delete(source); gain.disconnect(); };
-      // Queue the next pass a second early so it starts sample-accurately.
-      const next = end - overlap;
-      track.timer = env.setTimeout(() => pass(next, false), Math.max(0, next - ctx.currentTime - 1) * 1000);
     };
-    pass(ctx.currentTime + .02, true);
+    // The next pass always waits queued at its exact start time, so the timer that queues
+    // the one after it has a whole pass to fire. A long main-thread stall (an arena loading
+    // while the lobby theme plays) can delay that timer without ever opening a gap.
+    let next = ctx.currentTime + .02;
+    pass(next, true);
+    const queue = () => {
+      if (ctx.state === 'running' && next - ctx.currentTime < 1) { next += period; pass(next, false); }
+      track.timer = env.setTimeout(queue, Math.max(1, next - ctx.currentTime) * 1000);
+    };
+    queue();
     fadeIn(track);
     return track;
   }
