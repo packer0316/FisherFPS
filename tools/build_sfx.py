@@ -163,7 +163,6 @@ r("monsters/bride_intro", "fs:333832", 0.05, 3.4, fo=1.0, peak=-3)
 r("monsters/bride_summon", "fs:211872", 0.0, 2.6, fo=0.8, peak=-4)
 r("monsters/bride_march", "fs:420679", 0.0, 1.57, fo=0.45, peak=-5)
 r("monsters/bride_vow", "fs:406063", 0.08, 1.9, fo=0.6, peak=-3)
-r("monsters/bride_laugh", "fs:417826", 0.0, 1.16, fo=0.3, peak=-4)
 r("monsters/bride_death", "fs:359153", 0.0, 2.3, fo=0.8, peak=-3)
 
 # ---- Player.
@@ -281,8 +280,9 @@ def build(base):
         f.write("// sync is the key transient the game aligns to an animation frame.\n")
         f.write("import { eagleClips } from './desert-eagle-audio-clips.js';\n")
         f.write("import { rifleClips } from './classic-rifle-audio-clips.js';\n")
+        f.write("import { bossVoiceClips } from './boss-voice-audio-clips.js';\n")
         f.write("export const clips = " + json.dumps(manifest, separators=(",", ":")).replace('],"', '],\n  "')
-                .replace('{"', '{\n  ...eagleClips,\n  ...rifleClips,\n  "').replace("]}", "],\n};") + "\n")
+                .replace('{"', '{\n  ...rifleClips,\n  ...eagleClips,\n  ...bossVoiceClips,\n  "').replace("]}", "],\n};") + "\n")
     write_credits(base)
 
 

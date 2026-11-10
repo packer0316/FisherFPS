@@ -1,0 +1,123 @@
+"""Build the boss voice clips (laughs, humming, station announcement) from the picked sources.
+
+    python tools/build_boss_voice.py <sources dir>
+
+The sources dir is the reviewed candidate folder (FisherFPS_BOSS配音候選): Freesound HQ previews
+named NN_<title>_<id>.mp3 plus the project's own announcement recording 3_站長/01_中文廣播/00.mp3.
+Each clip is trimmed, faded, downmixed to mono and normalised to a target loudness with the
+peak kept under -1 dBFS. Writes public/audio/<name>.mp3, src/boss-voice-audio-clips.js
+([duration, sync] like audio-manifest.js) and public/audio/boss-voice-CREDITS.md.
+Requires ffmpeg (libmp3lame) and NumPy.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+import numpy as np
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "public", "audio")
+SR = 44100
+
+# name: (source file in the sources dir, start s, duration s or None, fade in, fade out, target LUFS, sync)
+# sync None = the loudest 5 ms frame, which game-audio's cue() aligns to the moment it asks for.
+RECIPES = {
+    "monsters/bride_laugh_1": ("2_鬼新娘/02_笑聲/02_Possessed_Laugh_559107.mp3", 0.35, 3.95, 0.01, 0.6, -16, None),
+    "monsters/bride_laugh_2": ("2_鬼新娘/02_笑聲/04_Insane_girl_laughter_368385.mp3", 0.5, None, 0.01, 0.5, -16, None),
+    # Silence before 2.4 s and after 25.2 s in the source.
+    "ambience/bride_hum": ("2_鬼新娘/07_哼唱/02_Egyptian_Ghost_Singing_321469.mp3", 2.4, 22.8, 0.8, 2.5, -20, 0),
+    "monsters/stationmaster_laugh": ("3_站長/02_笑聲/05_Man_Laugh_649082.mp3", 0.0, None, 0.01, 0.3, -16, None),
+    "ambience/station_announcement": ("3_站長/01_中文廣播/00.mp3", 0.1, 21.8, 0.05, 0.6, -18, 0),
+}
+CREDITS = {
+    "559107": ("Possessed Laugh.wav", "AgentA1cr", "CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
+    "368385": ("Insane girl laughter", "mvVoiceActing", "CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
+    "321469": ("Egyptian Ghost Singing.wav", "killbaybee", "CC BY 3.0", "https://creativecommons.org/licenses/by/3.0/"),
+    "649082": ("Man Laugh", "NinjaSharkStudios", "CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
+}
+
+
+def decode(path, start, dur):
+    cmd = ["ffmpeg", "-v", "error", "-ss", f"{start:.3f}"]
+    if dur:
+        cmd += ["-t", f"{dur:.3f}"]
+    cmd += ["-i", path, "-ac", "1", "-ar", str(SR), "-f", "f32le", "-"]
+    return np.frombuffer(subprocess.run(cmd, capture_output=True, check=True).stdout, np.float32).astype(np.float64)
+
+
+def loudness(x):
+    run = subprocess.run(["ffmpeg", "-v", "info", "-f", "f64le", "-ar", str(SR), "-ac", "1", "-i", "-",
+                          "-af", "ebur128", "-f", "null", "-"], input=x.tobytes(), capture_output=True)
+    found = re.findall(r"I:\s+(-?[\d.]+) LUFS", run.stderr.decode("utf8", "replace"))
+    return float(found[-1])
+
+
+def fade(x, fi, fo):
+    k = min(len(x), int(fi * SR))
+    if k:
+        x[:k] *= np.sin(np.linspace(0, np.pi / 2, k)) ** 2
+    k = min(len(x), int(fo * SR))
+    if k:
+        x[len(x) - k:] *= np.cos(np.linspace(0, np.pi / 2, k)) ** 2
+    return x
+
+
+def limit(x):
+    run = subprocess.run(["ffmpeg", "-v", "error", "-f", "f64le", "-ar", str(SR), "-ac", "1", "-i", "-",
+                          "-af", "alimiter=limit=0.89:attack=1:release=60:level=disabled",
+                          "-f", "f64le", "-ar", str(SR), "-ac", "1", "-"], input=x.tobytes(), capture_output=True, check=True)
+    y = np.frombuffer(run.stdout, np.float64).copy()
+    return np.clip(y, -0.89, 0.89)
+
+
+def sync_point(x):
+    hop = int(SR * 0.005)
+    n = len(x) // hop
+    rms = np.sqrt((x[: n * hop].reshape(n, hop) ** 2).mean(axis=1))
+    return float(np.argmax(rms) * hop / SR)
+
+
+def build(sources):
+    clips = {}
+    for name, (src, start, dur, fi, fo, target, sync) in RECIPES.items():
+        x = fade(decode(os.path.join(sources, src), start, dur), fi, fo)
+        gain = 10 ** ((target - loudness(x)) / 20)
+        ceiling = 10 ** (-1 / 20) / max(1e-6, np.abs(x).max())
+        if name.startswith("monsters/") and gain > ceiling:
+            # Laughs are peaky; a fast limiter lets them reach the target so variants match.
+            x = limit(x * gain)
+            ceiling = gain = 1.0
+        x *= min(gain, ceiling)
+        path = os.path.join(OUT, name + ".mp3")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-",
+                        "-c:a", "libmp3lame", "-q:a", "4", path], input=x.astype(np.float32).tobytes(), check=True)
+        clips[name] = [round(len(x) / SR, 3), round(sync_point(x) if sync is None else sync, 3)]
+        print(f"{name:32s} {len(x) / SR:6.2f}s sync {clips[name][1]:5.2f}s {loudness(x):6.1f} LUFS"
+              f"{'  (peak-limited)' if ceiling < gain else ''}")
+    with open(os.path.join(ROOT, "src", "boss-voice-audio-clips.js"), "w", encoding="utf8", newline="\n") as f:
+        f.write("// Generated by tools/build_boss_voice.py. [duration seconds, sync seconds] per clip.\n")
+        f.write("export const bossVoiceClips = " + json.dumps(clips, indent=2) + ";\n")
+    lines = ["# Boss voice credits", "",
+             "Cut, faded, downmixed to mono and loudness-normalised by `tools/build_boss_voice.py`.", "",
+             "| Clip | Source | Author | License |", "| --- | --- | --- | --- |"]
+    for name, (src, *_rest) in RECIPES.items():
+        sid = re.search(r"_(\d+)\.mp3$", src)
+        if sid and sid.group(1) in CREDITS:
+            title, author, lic, url = CREDITS[sid.group(1)]
+            lines.append(f"| {name} | [{title}](https://freesound.org/s/{sid.group(1)}/) | {author} | [{lic}]({url}) |")
+        else:
+            lines.append(f"| {name} | Recording supplied by the project owner | FisherFPS | Project-owned |")
+    lines += ["", "`ambience/bride_hum` is \"Egyptian Ghost Singing.wav\" by killbaybee (CC BY 3.0), trimmed to",
+              "2.4–25.2 s, faded and loudness-normalised; credit is required wherever the game is distributed."]
+    with open(os.path.join(OUT, "boss-voice-CREDITS.md"), "w", encoding="utf8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        raise SystemExit(__doc__)
+    sys.stdout.reconfigure(encoding="utf-8")
+    build(sys.argv[1])

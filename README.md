@@ -89,7 +89,7 @@ npm.cmd run preview
 - `src/combat-particles.js` 使用本機的 Effekseer for WebGL 1.80.3。命中綠血與場景共用深度緩衝，最多同時播放三次。收幣時，原作的 `Coin_UP_Get_Flash.efk` 會在賞金圖示前播放，最短間隔 0.2 秒。[Effekseer 發行版本](https://github.com/effekseer/Effekseer/releases/tag/1803)
 - `src/reward-coins.js` 依原作掉落表播放星幣。中怪每次付費命中有 1.5% 機率開 2 倍 BET 小獎，與擊倒互斥。一般場景桌機金幣池上限 160 枚，觸控裝置 96 枚，BOSS 場景 256 枚。飛往玩家的金幣加上抬升曲線，並依模型縮放後的底部與旋轉半徑檢查地面、階梯、二樓及車廂地板，避免整枚或半枚沉入地板。靜態支撐面建立空間索引，不逐幣全場 raycast。
 - `tools/convert_monsters.py` 透過 Blender 轉出木乃伊與死靈法師。`node tools/convert_cocos_zombies.mjs <TMDC_Zombie目錄>` 從原遊戲的 C3B 和貼圖重建男女殭屍與盜墓者 GLB，保留完整的骨架與道具動畫。一般開發與遊玩直接使用 `public/monsters` 內的成品。
-- 死靈法師使用原生 idle。幀表中沒有 idle 的角色使用各自的站定姿勢與輕微呼吸。男女殭屍和盜墓者播放各自的 dead 段，木乃伊和死靈法師採用原遊戲的普通退場。
+- 怪物在地面上一律播放 walk 動作，停下不動時也持續原地踏步（停下時以遊蕩速度 0.87 倍播放），不切換成 idle 站姿；跳下、落地起身與死亡仍播放各自的動作。男女殭屍和盜墓者播放各自的 dead 段，木乃伊和死靈法師採用原遊戲的普通退場。
 
 ## 音效接點
 
@@ -146,8 +146,14 @@ gameEvents.addEventListener('weapon:fire', ({ detail }) => {
 - 噴幣依金幣彈跳曲線在 0.50、0.80、0.90 秒三次落地，每枚錯開 0.03 秒；收幣逐枚觸發並逐漸升調。
   軍牌滾分的滴答聲依 1.12 秒 ease-out 曲線逐漸變慢；BOSS 金幣雨持續到最後一枚落地。
 - 選單（ESC 暫停、商店、BOSS 選單、自動遊玩）開啟為彈匣拍入的金屬聲，返回戰鬥為上膛聲。
+- BOSS 人聲：鬼新娘有兩種笑聲，在第二階段誓約攻擊時、以及擊中玩家時發出（每 7 秒最多一次）；
+  她活著時大廳會飄出哼唱，進場 14 秒後第一次，之後每段結束再隔 40–70 秒。站長在登場落地後、
+  發動特快列車時與擊中玩家時大笑；列車進站時播放中文月台廣播，每 70 秒最多一次。哼唱與廣播只在
+  該關載入、離開即釋放，BOSS 倒下時淡出。典獄長沿用原本的吼聲。
 
 素材全部是 CC0：Freesound 錄音與 Kenney 音效包，逐檔來源見 `public/audio/CREDITS.md`。
+BOSS 人聲例外：鬼新娘哼唱為 CC BY 3.0（需署名），月台廣播為專案自備錄音，來源與署名見
+`public/audio/boss-voice-CREDITS.md`；剪輯配方在 `tools/build_boss_voice.py`。
 剪輯配方集中在 `tools/build_sfx.py`（需要 ffmpeg 與 NumPy），重新產生 `public/audio` 與 `src/audio-manifest.js`：
 
 ```powershell

@@ -53,7 +53,6 @@ the exact edit for every clip is the recipe of the same name in that script.
 | [Explosion](https://freesound.org/s/398283/) | FlashTrauma | weapons/explosion_3 |
 | [Magic Strike.wav](https://freesound.org/s/406063/) | Aleks41 | monsters/bride_vow |
 | [male_hurt9.ogg](https://freesound.org/s/413186/) | micahlg | player/hurt_4 |
-| [Witch Cackle](https://freesound.org/s/417826/) | AntumDeluge | monsters/bride_laugh |
 | [Basic Melee Swing / Miss / Whoosh](https://freesound.org/s/420668/) | SypherZent | weapons/knife_swing_1 |
 | [Ghost Singing / La la la](https://freesound.org/s/420679/) | SypherZent | monsters/bride_march |
 | [9mm pistol load and chamber](https://freesound.org/s/427593/) | michorvath | weapons/pistol_mag_in, weapons/pistol_slide |

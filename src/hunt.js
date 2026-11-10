@@ -485,7 +485,7 @@ export async function loadHunt(scene, world, boss = null) {
       e.groundY=.015;
     }
     e.root.visible = !initial;
-    e.state = falling ? 'jump_down' : gate ? 'walk' : e.type.idle ? 'idle' : 'walk';
+    e.state = falling ? 'jump_down' : 'walk';
     const action = e.actions[e.state];
     action.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).play();
     if (falling) {
@@ -714,14 +714,11 @@ export async function loadHunt(scene, world, boss = null) {
       } else if(motion==='land'&&e.actions.stand_up) {
         setState(e,'stand_up');
         e.actions.stand_up.setEffectiveTimeScale(1);
-      } else setState(e,motion==='walk'?'walk':'idle');
-      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 1.2 * chasePace(distance) : 0.87;
-      // The four original species have no authored idle in FishDefine.
-      const breath =
-        e.state === 'idle' && !e.type.idle ? Math.sin(time * 2.1 + e.phase) * 0.009 : 0;
+      } else setState(e,'walk'); // Zombies keep shambling even while standing still.
+      e.actions.walk.timeScale = motion!=='walk' ? 0.87 : e.command.active ? 1.6 : e.nav.chasing ? 1.2 * chasePace(distance) : 0.87;
       // Species without authored jump poses keep their own rig; a small
       // landing compression supplies weight without inventing bone clips.
-      e.holder.position.y = e.groundOffset + breath -
+      e.holder.position.y = e.groundOffset -
         (motion==='land'&&!e.actions.stand_up ? Math.sin(Math.PI*e.nav.landing/e.nav.landDuration)*.055 : 0);
       e.animDebt += dt;
       if (e.animDebt >= (inFrame && distance < 30 ? 1 / 60 : inFrame ? 1 / 24 : 1 / 8)) {

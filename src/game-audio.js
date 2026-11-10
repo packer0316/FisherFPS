@@ -77,6 +77,10 @@ const ambience = {
   bride: ['ambience/castle', 0.6], stationmaster: ['ambience/station', 0.42],
 };
 const bosses = new Set(['warden', 'bride', 'stationmaster']);
+// Long clips used in one arena only: they load with its bed and unload when the player leaves.
+const levelClips = { bride: ['ambience/thunder', 'ambience/bride_hum'], stationmaster: ['ambience/station_announcement'] };
+// Boss laughs: [clip or variant family, variant count]. The warden has none.
+const bossLaughs = { bride: ['monsters/bride_laugh', 2], stationmaster: ['monsters/stationmaster_laugh', 1] };
 // Coin bounces: reward-coins.js jump() lands at 0.50, 0.80 and 0.90 s; small coins are staggered 0.03 s.
 const coinBounces = [[0.5, 1], [0.8, 0.5], [0.9, 0.28]];
 
@@ -85,7 +89,7 @@ export function makeGameAudio() {
   const last = new Map();
   let level = 'desert', playing = false, bossAt = null, chain = 0, chainTime = -1, menuMode = null;
   const menus = new Set(['pause', 'shop', 'challenges', 'autoplay']);
-  let groanLeft = 2.5, thunderLeft = 18, heartLeft = 0, health = 100, slamVariant = 0;
+  let groanLeft = 2.5, thunderLeft = 18, humLeft = 14, heartLeft = 0, health = 100, slamVariant = 0;
   const forward = new T.Vector3(), up = new T.Vector3();
 
   const variant = (base, n) => {
@@ -108,6 +112,14 @@ export function makeGameAudio() {
     audio.schedule(start, at => audio.play(name, { ...opts, at }), key);
   }
   const at = position => position && [position[0], position[1] + 0.2, position[2]];
+  // The boss laughs from where it stands; the position is read when the laugh starts.
+  function bossLaugh(delay) {
+    const spec = bossLaughs[level];
+    if (!spec) return;
+    const [base, count] = spec, name = count > 1 ? variant(base, count) : base;
+    audio.schedule(delay, when => audio.play(name, { at: when, volume: 0.8, ref: 7, pitchVar: 0.03, group: 'bosslaugh', limit: 1,
+      position: bossAt && [bossAt.x, bossAt.y + 2.5, bossAt.z] }));
+  }
 
   function coinBurst(position, small, big) {
     audio.play('reward/coin_spray_small', { position: at(position), volume: 0.5, ref: 3, pitchVar: 0.05 });
@@ -261,15 +273,26 @@ export function makeGameAudio() {
     } else if (species === 'bride') {
       const name = { summon: 'monsters/bride_summon', march: 'monsters/bride_march', vow: 'monsters/bride_vow' }[attack];
       if (name) audio.play(name, { position, volume: 0.75, ref: 6, pitchVar: 0.03 });
-      if (attack === 'vow' && phase === 2) cue('monsters/bride_laugh', 1.1, { position, volume: 0.6, ref: 6 });
+      if (attack === 'vow' && phase === 2 && throttle('bosslaugh', 4))
+        cue(variant('monsters/bride_laugh', 2), 1.1, { position, volume: 0.7, ref: 6, group: 'bosslaugh', limit: 1 });
+    } else if (species === 'stationmaster' && attack === 'express' && throttle('bosslaugh', 4)) {
+      bossLaugh(0.5); // laughs as he sends the express through
     }
   });
   on('boss:enter', ({ species }) => {
     const name = species === 'warden' ? 'monsters/roar_long' : species === 'bride' ? 'monsters/bride_intro' : null;
     if (name) audio.schedule(0.5, when => audio.play(name, { at: when, volume: 0.8,
       position: bossAt && [bossAt.x, bossAt.y + 2.5, bossAt.z], ref: 8 }));
+    // The stationmaster lands on the platform at 0.34 s (SD_in_1), then laughs.
+    if (species === 'stationmaster') bossLaugh(1.6);
+  });
+  // The station PA plays as a train approaches, at most once every 70 s.
+  on('station:train', ({ phase }) => {
+    if (phase === 'approaching' && level === 'stationmaster' && throttle('pa', 70))
+      audio.play('ambience/station_announcement', { volume: 0.5, tag: 'levelvoice' });
   });
   on('boss:defeat', ({ species }) => {
+    audio.stopTag('levelvoice', 1.2);
     const name = species === 'warden' ? 'monsters/roar_death' : species === 'bride' ? 'monsters/bride_death' : null;
     if (name) audio.play(name, { volume: 0.85, position: bossAt && [bossAt.x, bossAt.y + 2.5, bossAt.z], ref: 8 });
   });
@@ -277,6 +300,8 @@ export function makeGameAudio() {
     health = hp;
     audio.play(variant('player/hurt_hit', 3), { volume: 0.55, pitchVar: 0.05 });
     if (hp > 0) audio.play(variant('player/hurt', 5), { volume: 0.7, pitchVar: 0.04 });
+    // The bride and the stationmaster mock a hit, at most every 7 s.
+    if (hp > 0 && bossLaughs[level] && throttle('bosslaugh', 7)) bossLaugh(0.45);
   });
   on('player:death', () => {
     health = 0;
@@ -334,7 +359,7 @@ export function makeGameAudio() {
     /** Loads a level's ambience bed (and the castle's thunder) before the player enters. */
     prepareLevel(id) {
       const [bed] = ambience[id] ?? ambience.desert;
-      return audio.preload(id === 'bride' ? [bed, 'ambience/thunder'] : [bed]);
+      return audio.preload([bed, ...(levelClips[id] ?? [])]);
     },
     setMode(mode) {
       // Menus over the game (ESC pause, shop, boss select, autoplay) open with a metal clack;
@@ -352,14 +377,16 @@ export function makeGameAudio() {
       level = id;
       health = 100;
       groanLeft = 2;
+      humLeft = 14;
       const [bed, volume] = ambience[id] ?? ambience.desert;
       audio.loop(bed, volume);
-      if (id === 'bride') audio.load('ambience/thunder');
+      for (const name of levelClips[id] ?? []) audio.load(name);
       // Keep only the desert bed and the current one decoded; prepareLevel loads a boss bed again.
+      if (previous !== id) audio.stopTag('levelvoice', 0.4);
       if (previous !== id && previous !== 'desert') {
         const [old] = ambience[previous] ?? ambience.desert;
         if (old !== bed && old !== ambience.desert[0]) audio.unload(old);
-        if (previous === 'bride') audio.unload('ambience/thunder');
+        for (const name of levelClips[previous] ?? []) audio.unload(name);
       }
     },
     update(dt, { camera, enemies, boss, health: hp }) {
@@ -393,6 +420,14 @@ export function makeGameAudio() {
         if (thunderLeft <= 0) {
           thunderLeft = 24 + Math.random() * 26;
           audio.play('ambience/thunder', { bus: 'ambience', volume: 0.35 + Math.random() * 0.3, rate: 0.9 + Math.random() * 0.15 });
+        }
+        // The bride hums through the hall while she lives: first 14 s in, then 40-70 s after each ends.
+        if (boss?.alive) {
+          humLeft -= dt;
+          if (humLeft <= 0) {
+            humLeft = audio.clipDuration('ambience/bride_hum') + 40 + Math.random() * 30;
+            audio.play('ambience/bride_hum', { volume: 0.45, tag: 'levelvoice' });
+          }
         }
       }
       // Heartbeat below 30 HP in boss fights; it quickens as health drops.

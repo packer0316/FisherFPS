@@ -2,9 +2,11 @@
 // sync is the key transient the game aligns to an animation frame.
 import { eagleClips } from './desert-eagle-audio-clips.js';
 import { rifleClips } from './classic-rifle-audio-clips.js';
+import { bossVoiceClips } from './boss-voice-audio-clips.js';
 export const clips = {
   ...rifleClips,
   ...eagleClips,
+  ...bossVoiceClips,
   "weapons/ak_fire_1":[0.42,0],
   "weapons/ak_fire_2":[0.442,0],
   "weapons/ak_fire_3":[0.404,0],
@@ -109,7 +111,6 @@ export const clips = {
   "monsters/bride_summon":[2.6,1.053],
   "monsters/bride_march":[1.565,0.908],
   "monsters/bride_vow":[1.9,0.634],
-  "monsters/bride_laugh":[1.16,0.484],
   "monsters/bride_death":[2.3,1.177],
   "player/hurt_1":[0.62,0.269],
   "player/hurt_2":[0.8,0.269],
