@@ -270,7 +270,7 @@ async function boot() {
     $('lobby-wallet').textContent=economy.wallet.toLocaleString('en-US');
     $('lobby-weapon').textContent=weapon().name;
     $('lobby-weapon-class').textContent=weapon().family;
-    $('bet-amount').value = String(economy.bet);
+    $('bet-amount').value = economy.bet.toLocaleString('en-US');
     $('bet-minus').disabled = economy.bet <= MIN_BET;
     $('bet-plus').disabled = economy.bet >= MAX_BET;
     $('kills').textContent = String(economy.kills).padStart(2, '0');
@@ -754,8 +754,9 @@ async function boot() {
   $('lobby-armory').onclick = openShop;
   function setBet(value) {
     if (mode !== 'home') return;
-    const amount = Number(value);
-    if (String(value).trim() && validBet(amount)) {
+    // The field shows thousands separators, so accept them (and spaces) when reading it back.
+    const text = String(value).replace(/[,，\s]/g, ''), amount = Number(text);
+    if (text && validBet(amount)) {
       economy.bet = amount;
     } else notice('BET 請輸入 1–1,000,000 的整數');
     sync();

@@ -110,8 +110,7 @@
 .bet-controls button:active:not(:disabled) {background:#b7985d60;}
 .bet-controls button:disabled {opacity:.3;}
 .bet-value {display:flex;align-items:center;background:#090f13c9;border:1px solid #c5c1a833;min-width:0;}
-.bet-value input {width:100px;min-width:0;height:38px;padding:0 3px 0 7px;border:0;border-radius:0;outline-offset:2px;background:transparent;color:#f1e6cf;font:27px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;appearance:textfield;}
-.bet-value input::-webkit-inner-spin-button,.bet-value input::-webkit-outer-spin-button {-webkit-appearance:none;margin:0;}
+.bet-value input {width:118px;min-width:0;height:38px;padding:0 3px 0 7px;border:0;border-radius:0;outline-offset:2px;background:transparent;color:#f1e6cf;font:27px BarlowC,sans-serif;text-align:center;font-variant-numeric:tabular-nums;}
 .bet-value span {font-size:9px;color:#94a09a;white-space:nowrap;margin-right:7px;}
 .bet-details {display:flex;justify-content:space-between;gap:6px;margin-top:11px;padding-top:9px;border-top:1px solid #c5c1a819;align-items:flex-start;}
 .bet-details p {font-size:9px;color:#b4bdb7;line-height:1.7;margin:0;}
@@ -194,7 +193,7 @@
   .lobby-bet {padding:13px 12px 11px;}
   .bet-setting {gap:7px;}
   .bet-controls button {width:35px;height:42px;}
-  .bet-value input {width:94px;height:40px;font-size:25px;}
+  .bet-value input {width:110px;height:40px;font-size:25px;}
   .bet-value span {font-size:8px;margin-right:5px;}
   .bet-details {gap:4px;}
   .bet-details p {font-size:9px;}
@@ -210,7 +209,7 @@
   .lobby-card {padding-inline:16px;}
   .lobby-card-action {margin-inline:-16px;padding-inline:16px;}
   .bet-controls button {width:31px;}
-  .bet-value input {width:80px;}
+  .bet-value input {width:108px;}
   .bet-details {flex-direction:column;}
 }
 @media(max-height:550px) and (min-width:621px) {
@@ -246,7 +245,7 @@
   .bet-setting label {font-size:9px;letter-spacing:0;}
   .bet-setting label small {font-size:10px;margin-bottom:2px;}
   .bet-controls button {height:34px;width:30px;font-size:19px;}
-  .bet-value input {height:32px;width:87px;font-size:24px;}
+  .bet-value input {height:32px;width:106px;font-size:24px;}
   .bet-value span {font-size:8px;}
   .bet-details {margin-top:6px;padding-top:5px;}
   .bet-details p {font-size:8px;}
