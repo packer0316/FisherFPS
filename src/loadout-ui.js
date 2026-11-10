@@ -1,4 +1,5 @@
 import { weaponSlots, weaponSlot, slotWeapon } from './weapon-slots.js';
+import { weaponPortrait } from './weapon-portrait.js';
 import './loadout.css';
 
 export function makeLoadoutUI({weapons,economy,onOpen,onClose,onChoose}) {
@@ -13,7 +14,7 @@ export function makeLoadoutUI({weapons,economy,onOpen,onClose,onChoose}) {
   </section>`;
   document.getElementById('app').append(overlay);
   let category='rifle',opener=null,lastSelection='';
-  const art=id=>`<span class="loadout-art"><img src="loadout/${id}.webp" alt="" decoding="async" width="768" height="320"></span>`;
+  const art=id=>`<span class="loadout-art">${weaponPortrait(id)}</span>`;
   function refresh(){
     const signature=weaponSlots.map(slot=>slotWeapon(economy,slot.id)).join('|');
     if(signature===lastSelection)return;

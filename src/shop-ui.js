@@ -1,5 +1,6 @@
 import { $, gunIcon } from './ui.js';
 import { weaponSlot, slotWeapon } from './weapon-slots.js';
+import { weaponPortrait } from './weapon-portrait.js';
 import './shop.css';
 
 const categories = [
@@ -40,7 +41,7 @@ export function makeShopUI({weapons,economy,onClose}) {
       const badge=current?'目前使用':selected?'已配裝':owned?'已擁有':'可購買';
       const detail=id==='grenade'?`剩餘 ${economy.ammo.grenade} / 5 顆`:id==='knife'?'近戰 · 無需彈藥':`${w.mag} 發${id==='mg3'?'彈箱':'彈匣'} · ${w.semiAuto?'半自動':'全自動'}`;
       const cost=id==='grenade'?'每場配發 5 顆 · 範圍機率擊倒':id==='knife'?'近戰清怪 · 不發賞金':number(economy.bet)+' 幣 / 命中 · 打空退款';
-      const art=portraits.has(id)?`<img src="loadout/${id}.webp" width="768" height="320" alt="${w.name}" decoding="async">`:gunIcon(id);
+      const art=portraits.has(id)?weaponPortrait(id):gunIcon(id);
       return `<article class="armory-card${current?' is-current':''}${selected?' is-selected':''}" data-shop-weapon="${id}">
         <div class="armory-card-top"><span>${w.family}</span><b>${badge}</b></div>
         <div class="armory-art${portraits.has(id)?'':' is-silhouette'}">${art}</div>
