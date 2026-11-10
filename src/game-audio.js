@@ -319,12 +319,19 @@ export function makeGameAudio() {
       audio.setWorldActive(next);
     },
     setLevel(id) {
+      const previous = level;
       level = id;
       health = 100;
       groanLeft = 2;
       const [bed, volume] = ambience[id] ?? ambience.desert;
       audio.loop(bed, volume);
       if (id === 'bride') audio.load('ambience/thunder');
+      // Keep only the desert bed and the current one decoded; prepareLevel loads a boss bed again.
+      if (previous !== id && previous !== 'desert') {
+        const [old] = ambience[previous] ?? ambience.desert;
+        if (old !== bed && old !== ambience.desert[0]) audio.unload(old);
+        if (previous === 'bride') audio.unload('ambience/thunder');
+      }
     },
     update(dt, { camera, enemies, boss, health: hp }) {
       audio.update(dt);

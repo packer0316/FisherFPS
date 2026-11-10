@@ -2,7 +2,7 @@ import { makeRewardTagState, formatReward, easeOut, REWARD_HOLD, REWARD_EXIT, RE
 import { parseRewardFont, drawRewardNumber } from './reward-font.js';
 
 const kinds = { bronze: '命中小獎', silver: '擊倒賞金', gold: 'BOSS 賞金' };
-// Left edge of the metal frame in bronze/silver/gold.png (columns 98–101 of 2172), as a share of the width.
+// Left edge of the metal frame in bronze/silver/gold.png (columns 49–50 of 1086), as a share of the width.
 const PLATE_INSET = 0.046;
 const portraits = new Set(['walker', 'stalker', 'mummy', 'raider', 'necromancer', 'bride', 'warden', 'stationmaster']);
 async function loadImage(src) {

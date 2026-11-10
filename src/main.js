@@ -26,6 +26,7 @@ import { makeGrenadeProjectiles } from './grenade-projectiles.js';
 import { makeAutoPlayer } from './auto-play.js';
 import { makeAutoPlayUI } from './auto-play-ui.js';
 import { makeSceneMusic } from './scene-music.js';
+import { releaseScene } from './level-release.js';
 import { getAudio } from './audio.js';
 import { trackLoaderItems, makeLoadingScreen, preloadInterface } from './loading-screen.js';
 import { STARTING_WALLET,DEFAULT_BET,MIN_BET,MAX_BET,validBet,stepBet,captureRule,captureChance,formatChance,makePrizeRandom,resolveCaptureHit,makeRtpLedger } from './rtp.js';
@@ -45,7 +46,19 @@ async function boot() {
     alpha: false,
     powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.35 : 1.7));
+  // Cap the drawing buffer by pixel count, not only by ratio: with 4x MSAA each pixel costs
+  // ~36 bytes, so a 2560x1440 window at ratio 1.7 needed ~390 MB of framebuffer. The budget
+  // keeps 1440p native on desktop and ~1.6 MP on touch devices.
+  const pixelBudget = coarse ? 1.6e6 : 3.7e6;
+  const ratioCap = () => Math.min(devicePixelRatio, coarse ? 1.35 : 1.7,
+    Math.max(0.75, Math.sqrt(pixelBudget / (innerWidth * innerHeight))));
+  renderer.setPixelRatio(ratioCap());
+  // When the GPU runs out of memory the browser drops the WebGL context. Say so instead of
+  // leaving a frozen frame; three.js and Effekseer state cannot be rebuilt in place.
+  canvas.addEventListener('webglcontextlost', () => {
+    renderer.setAnimationLoop(null);
+    loading.fail('顯示記憶體不足，畫面已中斷，請重新整理頁面');
+  });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
@@ -64,7 +77,8 @@ async function boot() {
   const sound=makeGameAudio();
   sound.setLevel('desert');
   const music=makeSceneMusic({lobby:'mp3/ld9ga-2uzra.mp3',warden:'mp3/boss-prison.mp3',bride:'mp3/boss-castle.mp3',stationmaster:'mp3/boss-station.mp3'},
-    {muted:()=>getAudio().muted,keep:['lobby']});
+    // No track stays decoded while another plays (the lobby theme alone is ~23 MB of PCM).
+    {muted:()=>getAudio().muted});
   const menus=preloadInterface();
   const sceneLoad=job.part('載入場景、模型與貼圖',6,job.loaderProgress);
   const soundLoad=job.part('載入音效',2,sound.preloadProgress);
@@ -212,6 +226,8 @@ async function boot() {
   }
   function resize() {
     lookInput.clear(performance.now());
+    // A larger window lowers the cap; the frame-time governor may already sit below it.
+    if (renderer.getPixelRatio() > ratioCap()) renderer.setPixelRatio(ratioCap());
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -438,6 +454,17 @@ async function boot() {
       fx:makeEffects(room,particles.playBlood,arena.rubble),radar:makeRadar(arena,player)};
     levels.set(id,level);return level;
   }
+  // Keep only the boss arena being played. Every visited arena used to stay resident
+  // (scene, textures, shadow map, crowd), so touring all three bosses exhausted memory.
+  // Re-entering a released arena loads it again behind the loading screen.
+  function releaseOtherLevels(id){
+    for(const [other,level] of levels){
+      if(other===id)continue;
+      level.warden?.stop?.();level.world.setActive?.(false);level.world.cancelTransit?.();
+      levels.delete(other);loadingLevels.delete(other);
+      releaseScene(level.scene,[desert.scene,scene]);
+    }
+  }
   function activateLevel(level,pose) {
     stopAutoPlay(false);
     world.cancelTransit?.();transitLocked=false;$('train-warning').hidden=true;
@@ -496,6 +523,7 @@ async function boot() {
       if(!warden)fieldReturn={player:{...player},feet,kills:economy.kills,wave:economy.wave,mode:bossReturn};
       settleBossOnLeave();warden?.stop();fx.clear();rewardCoins.clear();challengeId=id;
       activateLevel(level,{player:level.world.spawn??{x:0,z:id==='bride'?20:16.5,yaw:0,pitch:id==='bride' ? .04 : .12},feet:0});
+      releaseOtherLevels(id);
       economy.kills=0;economy.wave=1;restockGrenades();fx.clear();rewardCoins.clear();
       hunt.populate(camera);warden.reset();sync();ui();
       emit('boss:enter',{species:id});

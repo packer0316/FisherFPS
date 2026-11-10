@@ -27,7 +27,7 @@ function makeAudio() {
   if (!ctx) {
     const noop = () => null;
     return { play: noop, schedule: noop, cancel: noop, update: noop, load: async () => {}, preload: async () => {},
-      loop: noop, setWorldActive: noop, setMuted: noop, get muted() { return true; }, unlock: noop,
+      loop: noop, unload: noop, setWorldActive: noop, setMuted: noop, get muted() { return true; }, unlock: noop,
       setListener: noop, clipDuration: () => 0, clipSync: () => 0, now: () => 0, stopTag: noop };
   }
   const master = ctx.createGain();
@@ -74,6 +74,12 @@ function makeAudio() {
     return loading.get(name);
   }
   // onLoaded runs once per clip, failed ones included, so callers can show progress.
+  // Drop a decoded clip (an ambience bed is ~15 MB of PCM). Voices still playing keep
+  // their own reference until they end; the next load fetches it again.
+  function unload(name) {
+    buffers.delete(name);
+    loading.delete(name);
+  }
   async function preload(names, concurrency = 6, onLoaded) {
     const queue = [...names];
     await Promise.all(Array.from({ length: concurrency }, async () => {
@@ -237,7 +243,7 @@ function makeAudio() {
     master.gain.setTargetAtTime(value ? 0 : 1, ctx.currentTime, 0.03);
   }
   const api = {
-    play, schedule, cancel, update, load, preload, loop, setWorldActive, setMuted, unlock, setListener, stopTag,
+    play, schedule, cancel, update, load, preload, unload, loop, setWorldActive, setMuted, unlock, setListener, stopTag,
     onPlay: null, // optional (name, secondsFromNow, opts) observer for tests and debugging
     get muted() { return muted; },
     get state() { return ctx.state; },
