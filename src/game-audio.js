@@ -78,7 +78,7 @@ const ambience = {
 };
 const bosses = new Set(['warden', 'bride', 'stationmaster']);
 // Long clips used in one arena only: they load with its bed and unload when the player leaves.
-const levelClips = { bride: ['ambience/thunder', 'ambience/bride_hum'], stationmaster: ['ambience/station_announcement'] };
+const levelClips = { bride: ['ambience/thunder', 'ambience/bride_hum'] };
 // Boss laughs: [clip or variant family, variant count]. The warden has none.
 const bossLaughs = { bride: ['monsters/bride_laugh', 2], stationmaster: ['monsters/stationmaster_laugh', 1] };
 // Coin bounces: reward-coins.js jump() lands at 0.50, 0.80 and 0.90 s; small coins are staggered 0.03 s.
@@ -285,11 +285,6 @@ export function makeGameAudio() {
       position: bossAt && [bossAt.x, bossAt.y + 2.5, bossAt.z], ref: 8 }));
     // The stationmaster lands on the platform at 0.34 s (SD_in_1), then laughs.
     if (species === 'stationmaster') bossLaugh(1.6);
-  });
-  // The station PA plays as a train approaches, at most once every 70 s.
-  on('station:train', ({ phase }) => {
-    if (phase === 'approaching' && level === 'stationmaster' && throttle('pa', 70))
-      audio.play('ambience/station_announcement', { volume: 0.5, tag: 'levelvoice' });
   });
   on('boss:defeat', ({ species }) => {
     audio.stopTag('levelvoice', 1.2);

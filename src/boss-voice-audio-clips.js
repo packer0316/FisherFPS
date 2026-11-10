@@ -15,9 +15,5 @@ export const bossVoiceClips = {
   "monsters/stationmaster_laugh": [
     3.422,
     2.045
-  ],
-  "ambience/station_announcement": [
-    21.8,
-    0
   ]
 };

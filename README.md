@@ -148,11 +148,11 @@ gameEvents.addEventListener('weapon:fire', ({ detail }) => {
 - 選單（ESC 暫停、商店、BOSS 選單、自動遊玩）開啟為彈匣拍入的金屬聲，返回戰鬥為上膛聲。
 - BOSS 人聲：鬼新娘有兩種笑聲，在第二階段誓約攻擊時、以及擊中玩家時發出（每 7 秒最多一次）；
   她活著時大廳會飄出哼唱，進場 14 秒後第一次，之後每段結束再隔 40–70 秒。站長在登場落地後、
-  發動特快列車時與擊中玩家時大笑；列車進站時播放中文月台廣播，每 70 秒最多一次。哼唱與廣播只在
-  該關載入、離開即釋放，BOSS 倒下時淡出。典獄長沿用原本的吼聲。
+  發動特快列車時與擊中玩家時大笑。哼唱只在該關載入、離開即釋放，BOSS 倒下時淡出。
+  典獄長沿用原本的吼聲。
 
 素材全部是 CC0：Freesound 錄音與 Kenney 音效包，逐檔來源見 `public/audio/CREDITS.md`。
-BOSS 人聲例外：鬼新娘哼唱為 CC BY 3.0（需署名），月台廣播為專案自備錄音，來源與署名見
+BOSS 人聲例外：鬼新娘哼唱為 CC BY 3.0（需署名），來源與署名見
 `public/audio/boss-voice-CREDITS.md`；剪輯配方在 `tools/build_boss_voice.py`。
 剪輯配方集中在 `tools/build_sfx.py`（需要 ffmpeg 與 NumPy），重新產生 `public/audio` 與 `src/audio-manifest.js`：
 

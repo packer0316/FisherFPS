@@ -1,9 +1,9 @@
-"""Build the boss voice clips (laughs, humming, station announcement) from the picked sources.
+"""Build the boss voice clips (laughs and humming) from the picked sources.
 
     python tools/build_boss_voice.py <sources dir>
 
 The sources dir is the reviewed candidate folder (FisherFPS_BOSS配音候選): Freesound HQ previews
-named NN_<title>_<id>.mp3 plus the project's own announcement recording 3_站長/01_中文廣播/00.mp3.
+named NN_<title>_<id>.mp3.
 Each clip is trimmed, faded, downmixed to mono and normalised to a target loudness with the
 peak kept under -1 dBFS. Writes public/audio/<name>.mp3, src/boss-voice-audio-clips.js
 ([duration, sync] like audio-manifest.js) and public/audio/boss-voice-CREDITS.md.
@@ -29,7 +29,6 @@ RECIPES = {
     # Silence before 2.4 s and after 25.2 s in the source.
     "ambience/bride_hum": ("2_鬼新娘/07_哼唱/02_Egyptian_Ghost_Singing_321469.mp3", 2.4, 22.8, 0.8, 2.5, -20, 0),
     "monsters/stationmaster_laugh": ("3_站長/02_笑聲/05_Man_Laugh_649082.mp3", 0.0, None, 0.01, 0.3, -16, None),
-    "ambience/station_announcement": ("3_站長/01_中文廣播/00.mp3", 0.1, 21.8, 0.05, 0.6, -18, 0),
 }
 CREDITS = {
     "559107": ("Possessed Laugh.wav", "AgentA1cr", "CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
