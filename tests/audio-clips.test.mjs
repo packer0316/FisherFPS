@@ -32,7 +32,7 @@ test('clips and variant families used by the game exist in the manifest', () => 
 
 test('reload parts land inside the reload and keep the animation order', () => {
   const table = source.slice(source.indexOf('const reloadParts'), source.indexOf('const shots'));
-  for (const weapon of ['rifle', 'pistol', 'mg3']) {
+  for (const weapon of ['rifle', 'm4a1', 'scarl', 'vss', 'pistol', 'deagle', 'mg3']) {
     const block = table.slice(table.indexOf(weapon + ':'), table.indexOf('],', table.indexOf(weapon + ':')));
     const stops = [...block.matchAll(/at: ([0-9.]+)/g)].map(m => Number(m[1]));
     assert.ok(stops.length >= 3, weapon);

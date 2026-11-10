@@ -16,6 +16,9 @@ export async function warmRender(renderer,scene,camera) {
   });
   try {
     renderer.setViewport(0,0,1,1);renderer.setScissor(0,0,1,1);renderer.setScissorTest(true);
+    // The shadow map only renders on request; without it, each species' skinned depth
+    // material compiled the first time that monster cast a shadow during combat.
+    renderer.shadowMap.needsUpdate=true;
     renderer.render(scene,camera);
   }finally{
     for(const [o,visible,cull,count] of saved){o.visible=visible;o.frustumCulled=cull;if(count!==null)o.count=count;}

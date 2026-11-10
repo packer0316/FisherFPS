@@ -197,7 +197,7 @@ export function installWeapon(body, asset, rifle, detailMap) {
     port = nodes('EjectionPort').getWorldPosition(v());
   const opticMount = rifle ? nodes('OpticRailContact').getWorldPosition(v()) : v();
   if (rifle) {
-    addReceiverHardware(space);
+    addReceiverHardware(space, detailMap);
     finishRifle(space, detailMap);
   }
   space.attach(mag);

@@ -3,7 +3,10 @@
 // body/head test; a route can never connect the bridge to the street by accident.
 export const navigationRules = Object.freeze({
   cell: .6, radius: .40, height: 2.35, step: .25, jumpUp: 1.32, drop: 3.25,
-  gravity: 9.81, frameBudgetMs: 2, expansionsPerFrame: 80, searchLimit: 6000,
+  gravity: 9.81, frameBudgetMs: 2, expansionsPerFrame: 200, searchLimit: 6000,
+  // A route is replanned once the goal drifts this far, or this share of the
+  // remaining distance, so far chasers do not flood the shared search queue.
+  replanDrift: 1.4, replanShare: .15,
 });
 const {cell, radius, height, step, gravity}=navigationRules;
 const skin=.015;
@@ -298,7 +301,8 @@ export function makeHuntNavigation(world) {
     if(d<=stopDistance&&Math.abs(from.y-goal.y)<.4&&n.direct) {
       turn(actor,goal.x,goal.z,dt);return 'idle';
     }
-    if(!n.direct && n.retry<=0 && (!n.routeGoal||distance(goal,n.routeGoal)>1.4||
+    const drift=Math.max(navigationRules.replanDrift,d*navigationRules.replanShare);
+    if(!n.direct && n.retry<=0 && (!n.routeGoal||distance(goal,n.routeGoal)>drift||
       Math.abs(goal.y-n.routeGoal.y)>.4||n.cursor>=n.path.length||n.stuck>.6))request(actor,goal);
     let target=goal,leg=null;
     if(!n.direct) {

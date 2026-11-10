@@ -27,19 +27,26 @@ export function icon(name) {
   );
 }
 export function gunIcon(type) {
+  const rifles={
+    m4a1:'M3 19h17l4 4h7v-5h4v-5h14v4h21v-3h3v5h12v3h8v4H68l-2 4H49l2 13-9 1-4-14h-7l-4 10-7-3 4-12H14L3 32zm34-1h7v-3h-7z',
+    vss:'M2 22h21l8 3h7v-7h8v-6h19v5H49v4h12v3h34v9H61l-3 3H47l1 8-9 1-3-10h-6l-5 9H2zm5 6v10h13l5-7-6-3z',
+    scarl:'M3 17h17l7 4h8v-9h25v3h13v4h8v-4h3v6h9v5H65l-2 5H49l3 11-9 2-7-13h-5l-4 10-8-3 5-12H14L3 32zm36-2v3h16v-3z',
+  };
   const path =
-    type === 'grenade'
+    rifles[type] ?? (type === 'grenade'
       ? 'M41 7h15v5h-3l6 8c15 17 5 29-12 29S20 35 32 20l8-8h-3V7zm16 3h7l5 21-4 2-5-18h-3zM31 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'
       : type === 'knife'
       ? 'M4 36l20-12 3 4 4-3-4-8 4-2 4 5C50 16 68 9 89 7 76 22 59 30 39 32l2 5-4 2-5-8-5 3 1 4-19 10z'
+      : type === 'deagle'
+        ? 'M5 10h58v5h4v9H39l-3 7H24l-3 15H8l6-22H5zm20 15-1 4h9l2-5H25zM10 7h4v3h-4zm44 0h5v3h-5z'
       : type === 'pistol'
         ? 'M8 11h53v4h4v10H38l-4 5h-9l-4 14H10l5-21H8zm17 14-1 4h6l3-4z'
         : type === 'mg3'
           ? 'M2 19l13 2 8-3h8v-3h12l3 3h29v-4h3v5h7l4-2h3v6h-5l-3-1h-7l-15 9-2-2 11-7H53v4H40v12H24V27l-4 8-5-2 4-9-6 1-9 5H2zm45 1v2h5v-2zm8 0v2h5v-2zm8 0v2h5v-2z'
-        : 'M3 19h14l7 4h8v-9h6v4h25v-3h4v4h12v3h10v4H66l-4 4H48l4 12-8 3-7-15h-5l-4 11-7-3 3-10h-7L4 35z';
+        : 'M3 19h14l7 4h8v-9h6v4h25v-3h4v4h12v3h10v4H66l-4 4H48l4 12-8 3-7-15h-5l-4 11-7-3 3-10h-7L4 35z');
   return (
     '<svg viewBox="0 0 ' +
-    (type === 'pistol' ? 72 : 94) +
+    (type === 'pistol' || type === 'deagle' ? 72 : 94) +
     ' 52" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="' +
     path +
     '"/></svg>'

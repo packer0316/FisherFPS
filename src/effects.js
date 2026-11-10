@@ -171,8 +171,8 @@ export function makeEffects(scene, playBlood, rubble = null) {
   function shot(from, hit, weapon) {
     gunLight.position.copy(from);
     lightLife = .085;
-    const longGun = weapon === 'rifle' || weapon === 'mg3';
-    peakLight = weapon === 'mg3' ? 23 : longGun ? 19 : 12;
+    const longGun = ['rifle','m4a1','vss','scarl','mg3'].includes(weapon);
+    peakLight = weapon === 'vss' ? 3 : weapon === 'deagle' ? 25 : weapon === 'mg3' ? 23 : longGun ? 19 : 12;
     const t = trails.take();
     t.origin ??= new T.Vector3();
     t.origin.copy(from);

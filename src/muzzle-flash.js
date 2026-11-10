@@ -43,9 +43,9 @@ export function muzzleFlash(scene) {
   let life = 0,
     size = 0;
   return {
-    fire(rifle) {
+    fire(rifle, strength = 1) {
       life = 0.064;
-      size = (rifle ? 0.53 : 0.4) * (0.82 + 0.34 * Math.random());
+      size = (rifle ? 0.53 : 0.4) * strength * (0.82 + 0.34 * Math.random());
       uniforms.seed.value = Math.random() * 280;
       flash.rotation.z = (Math.random() - 0.5) * 0.65;
     },

@@ -10,9 +10,15 @@ import { installWeapon } from './weapon-rig.js';
 import { muzzleFlash } from './muzzle-flash.js';
 import { getSmokeTexture } from './effects.js';
 import { warmRender } from './render-warmup.js';
+import { installDesertEagle } from './desert-eagle.js';
+import { desertEagle } from './desert-eagle-spec.js';
+import { classicRifles, isClassicRifle } from './rifle-specs.js';
+import { installClassicRifle } from './classic-rifle.js';
+import { addViewmodelMinimumLight } from './viewmodel-lighting.js';
 
 export const startingWeapon = 'rifle';
 export const weapons = {
+  ...classicRifles,
   grenade: {
     name: 'G5 手榴彈', code: 'G5', family: '投擲武器',
     damage: grenadeStats.damage, cost: 0, price: 0,
@@ -27,7 +33,9 @@ export const weapons = {
     cost: 1,
     price: 0,
     reload: 1.65,
+    semiAuto: true,
   },
+  deagle: desertEagle,
   knife: {
     name: 'KA-BAR 戰鬥刀',
     code: 'KA-BAR',
@@ -79,24 +87,32 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   key.position.copy(fillDirection);
   rim.position.set(2, 1, -2);
   scene.add(key, rim, new T.HemisphereLight(0xe2edfc, 0x916e4f, 1.12));
-  const bodies = { pistol: new T.Group(), rifle: new T.Group(), knife: new T.Group(), mg3: new T.Group(), grenade: new T.Group() };
+  const bodies = { pistol: new T.Group(), deagle: new T.Group(), rifle: new T.Group(), knife: new T.Group(), mg3: new T.Group(), grenade: new T.Group() };
+  for(const id of Object.keys(classicRifles))bodies[id]=new T.Group();
   root.add(...Object.values(bodies));
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  const [pistol, ak, knife, detailMap, knifeArms] = await Promise.all([
+  const [pistol, ak, knife, detailMap, knifeArms, eagle, rifleAssets] = await Promise.all([
     ...['p226', 'ak47', 'kabar'].map((id) => loader.loadAsync('viewmodel/' + id + '.glb')),
     new T.TextureLoader().loadAsync('viewmodel/ak-finish.webp'),
     loader.loadAsync('viewmodel/knife-arms.glb'),
+    loader.loadAsync('viewmodel/desert-eagle.glb'),
+    Promise.all(Object.keys(classicRifles).map(id=>loader.loadAsync('viewmodel/'+id+'.glb'))),
   ]);
   detailMap.wrapS = detailMap.wrapT = T.RepeatWrapping;
   detailMap.anisotropy = 4;
   // The two long guns share the glove geometry and textures, but pose independent bones.
   const machineArms = clone(ak.scene.getObjectByName('FPRig'));
+  const classicHands=Object.keys(classicRifles).map(()=>clone(ak.scene));
+  const eagleHands = clone(knifeArms.scene);
   const rigs = {
+    deagle: installDesertEagle(bodies.deagle, eagleHands, eagle, ak.scene.getObjectByName('FPArms').material),
     grenade: installGrenade(bodies.grenade, knifeArms, ak.scene.getObjectByName('FPArms').material, detailMap),
     knife: installKnife(bodies.knife, knifeArms, knife, detailMap, ak.scene.getObjectByName('FPArms').material),
     pistol: installWeapon(bodies.pistol, pistol, false),
     rifle: installWeapon(bodies.rifle, ak, true, detailMap),
   };
+  Object.keys(classicRifles).forEach((id,i)=>{rigs[id]=installClassicRifle(bodies[id],classicHands[i],rifleAssets[i],id,detailMap)});
+  addViewmodelMinimumLight(root);
   const flash = muzzleFlash(scene),
     muzzle = new T.Vector3();
   const vapors = Array.from({ length: 5 }, () => {
@@ -132,7 +148,10 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
   const s = T.MathUtils.smoothstep,
     lerp = T.MathUtils.lerp;
   function equip(id) {
-    if (id === 'mg3' && !rigs.mg3) rigs.mg3 = installMachineGun(bodies.mg3, machineArms);
+    if (id === 'mg3' && !rigs.mg3) {
+      rigs.mg3 = installMachineGun(bodies.mg3, machineArms);
+      addViewmodelMinimumLight(bodies.mg3);
+    }
     selected = id;
     flash.clear();
   }
@@ -171,13 +190,13 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
       rigs.knife.swing();
       return;
     }
-    const longGun = current === 'rifle' || current === 'mg3',
+    const longGun = current === 'rifle' || isClassicRifle(current) || current === 'mg3',
       body = bodies[current],
       rig = rigs[current];
-    recoilSpeed += current === 'mg3' ? 48 : longGun ? 42 : 65;
+    recoilSpeed += weapons[current].viewKick ?? (current === 'deagle' ? 88 : current === 'mg3' ? 48 : longGun ? 42 : 65);
     roll = (Math.random() - 0.5) * 0.042;
     cycle = 0;
-    flash.fire(longGun);
+    flash.fire(longGun, current === 'vss' ? .28 : current === 'deagle' ? 1.35 : 1);
     const vapor = vapors[shellIndex % vapors.length];
     vapor.age = 0;
     vapor.drift = (Math.random() - 0.5) * 0.09;
@@ -186,6 +205,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     const shell = casings[shellIndex++ % casings.length];
     shell.life = 0.43;
     shell.mesh.visible = true;
+    shell.mesh.scale.set(current === 'deagle' ? 1.38 : 1, current === 'deagle' ? 1.12 : 1, current === 'deagle' ? 1.38 : 1);
     body.localToWorld(shell.mesh.position.copy(rig.port));
     shell.velocity.set(0.58 + Math.random() * 0.27, 0.46 + Math.random() * 0.17, 0.06);
   }
@@ -208,15 +228,15 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     stride = 0, grounded = true, rounds = 0, grenadeState = null,
   ) {
     updateDraw(dt);
-    const machineGun = current === 'mg3',
-      longGun = current === 'rifle' || machineGun,
+    const eagleGun = current === 'deagle', machineGun = current === 'mg3',
+      longGun = current === 'rifle' || isClassicRifle(current) || machineGun,
       rig = rigs[current];
-    const stiffness = longGun ? 31 : 25,
+    const stiffness = eagleGun ? 22 : longGun ? 31 : 25,
       decay = Math.exp(-stiffness * dt),
       travel = recoilSpeed + stiffness * recoil;
     recoil = (recoil + travel * dt) * decay;
     recoilSpeed = (recoilSpeed - stiffness * travel * dt) * decay;
-    cycle = Math.min(1, cycle + dt / (machineGun ? weapons.mg3.delay : 0.092));
+    cycle = Math.min(1, cycle + dt / (eagleGun ? .145 : machineGun ? weapons.mg3.delay : 0.092));
     time += dt;
     const tilt = s(phase, 0, 0.21) * (1 - s(phase, 0.77, 1));
     // Keep the gun, skinned hands and effect sockets in the same scaled space.
@@ -228,7 +248,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
     }
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
-    scene.environment = worldScene.environment;
+    scene.environment = rig.environment ?? worldScene.environment;
     scene.environmentIntensity = machineGun ? 0.84 : current === 'knife' ? 0.67 : 0.96;
     if (current !== 'pistol') {
       // Keep reflections anchored to the map as the weapon turns in the player's hands.
@@ -250,7 +270,7 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
       root.position.set(0,0,0); root.rotation.set(0,0,0);
       rig.update(dt, grounded ? moving : 0, aspect, steerX, steerY, stride, grenadeState, rounds);
     } else if (current === selected) {
-      if (!longGun) ads = 0;
+      if (!weapons[current].aimFov) ads = 0;
       rig.pose(phase, empty, cycle, ads, rounds);
       const freedom = 1 - ads,
         narrow = Math.min(1, aspect / 1.4);
@@ -262,13 +282,13 @@ export async function makeViewmodel(worldScene, worldCamera, sun) {
           freedom * Math.abs(Math.cos(time * 9)) * 0.006 * moving +
           (machineGun ? 0.055 : longGun ? 0.084 : 0.062) * tilt +
           0.012 * (s(phase, 0.64, 0.67) - s(phase, 0.67, 0.75)),
-        lerp(machineGun ? -0.545 : longGun ? lerp(-0.505, -0.472, wide) : -0.385, (machineGun ? -0.29 : -0.149) * gunScale, ads) +
-          recoil * 0.026 - (machineGun ? 0.21 : longGun ? 0.14 : 0.09) * tilt,
+        lerp(machineGun ? -0.545 : longGun ? lerp(-0.505, -0.472, wide) : eagleGun ? -0.405 : -0.385, (rig.adsZ ?? (eagleGun ? -.27 : machineGun ? -0.29 : -0.149)) * gunScale, ads) +
+          recoil * (eagleGun ? .044 : .026) - (machineGun ? 0.21 : longGun ? 0.14 : 0.09) * tilt,
       );
       root.rotation.set(
-        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(0.089, machineGun ? 0.009 : 0.028, ads) + tilt * (machineGun ? 0.12 : 0.18) + steerY * freedom,
-        freedom * (longGun ? 0.139 * narrow : 0.055) + steerX * freedom + tilt * (current === 'rifle' ? .18 : .34),
-        tilt * (current === 'rifle' ? .10 : .25) +
+        freedom * (machineGun ? -0.005 : longGun ? 0.061 : 0.018) + recoil * lerp(eagleGun ? .14 : .089, eagleGun ? .075 : machineGun ? 0.009 : 0.028, ads) + tilt * (machineGun ? 0.12 : 0.18) + steerY * freedom,
+        freedom * (longGun ? 0.139 * narrow : 0.055) + steerX * freedom + tilt * (longGun ? .18 : .34),
+        tilt * (longGun ? .10 : .25) +
           recoil * roll +
           (empty ? 0.1 * (s(phase, 0.73, 0.81) - s(phase, 0.89, 0.97)) : 0),
       );

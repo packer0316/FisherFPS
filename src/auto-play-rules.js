@@ -1,3 +1,4 @@
+import { slotWeapon } from './weapon-slots.js';
 export function togglePriority(order,id) {
   return order.includes(id)?order.filter(value=>value!==id):[...order,id];
 }
@@ -6,7 +7,7 @@ export function normalizePriority(order,roster) {
   return [...new Set(Array.isArray(order)?order:[])].filter(id=>valid.has(id));
 }
 export function preferredAutoWeapon(economy) {
-  return economy.owned.has('mg3')&&economy.ammo.mg3>0?'mg3':'rifle';
+  return economy.owned.has('mg3')&&economy.ammo.mg3>0?'mg3':slotWeapon(economy,'rifle');
 }
 
 // Positive clearance is safe. Inflate danger by the player's body width, while

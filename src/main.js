@@ -7,6 +7,8 @@ import './reward-tags.css';
 import * as T from 'three';
 import { makeWorld, spawn } from './world.js';
 import { makeViewmodel, startingWeapon, weapons } from './weapons.js';
+import { makeLoadoutUI } from './loadout-ui.js';
+import { normalizeLoadout, selectLoadout, slotWeapon } from './weapon-slots.js';
 import { makeEffects } from './effects.js';
 import { loadCombatParticles } from './combat-particles.js';
 import { loadHunt } from './hunt.js';
@@ -116,10 +118,20 @@ async function boot() {
     rtp: makeRtpLedger(),
     kills: 0,
     wave: 1,
-    owned: new Set([startingWeapon, 'pistol', 'knife', 'grenade']),
+    owned: new Set(Object.entries(weapons).filter(([,w])=>w.price===0).map(([id])=>id)),
     weapon: startingWeapon,
     ammo: { grenade: grenadeStats.supply, ...Object.fromEntries(Object.entries(weapons).filter(([, w]) => w.mag).map(([id, w]) => [id, w.mag])) },
   };
+  const loadoutStorage='dustline-loadout-v1';
+  let savedLoadout;
+  try{savedLoadout=JSON.parse(localStorage.getItem(loadoutStorage))}catch{}
+  economy.loadout=normalizeLoadout(savedLoadout,economy.owned);
+  economy.weapon=economy.loadout.rifle;view.equip(economy.weapon);
+  const loadoutUI=makeLoadoutUI({weapons,economy,
+    onOpen(slot){if(mode!=='home')return;setMode('loadout');loadoutUI.show(slot)},
+    onClose(){loadoutUI.hide();setMode('home')},
+    onChoose(id){if(selectLoadout(economy,id)){try{localStorage.setItem(loadoutStorage,JSON.stringify(economy.loadout))}catch{}equip(id);sync()}}
+  });
   const grenade = makeGrenadeState(throwGrenade);
   // Every match starts with a full supply: 一般模式 entered from the lobby, and every BOSS
   // challenge including retries. Resuming from pause, the shop or a weapon switch keeps the count.
@@ -268,8 +280,7 @@ async function boot() {
   function sync() {
     $('wallet').textContent = economy.wallet.toLocaleString('en-US');
     $('lobby-wallet').textContent=economy.wallet.toLocaleString('en-US');
-    $('lobby-weapon').textContent=weapon().name;
-    $('lobby-weapon-class').textContent=weapon().family;
+    loadoutUI.refresh();
     $('bet-amount').value = economy.bet.toLocaleString('en-US');
     $('bet-minus').disabled = economy.bet <= MIN_BET;
     $('bet-plus').disabled = economy.bet >= MAX_BET;
@@ -287,7 +298,6 @@ async function boot() {
     const weaponIcon = $('weapon-icon');
     if (weaponIcon.dataset.weapon !== economy.weapon) {
       weaponIcon.innerHTML = gunIcon(economy.weapon);
-      $('lobby-weapon-icon').innerHTML = gunIcon(economy.weapon);
       weaponIcon.dataset.weapon = economy.weapon;
     }
     $('shop-balance').textContent = economy.wallet.toLocaleString('en-US');
@@ -313,13 +323,13 @@ async function boot() {
     stopInput();
     lock = null;
     $('app').classList.toggle('playing', next === 'play');
-    atHome=next==='home'||(next==='shop'&&shopReturn==='home')||(next==='challenges'&&bossReturn==='home');
+    atHome=next==='home'||next==='loadout'||(next==='shop'&&shopReturn==='home')||(next==='challenges'&&bossReturn==='home');
     $('app').classList.toggle('at-home',atHome);
     // Menus opened from the lobby keep its music. Boss arenas play their own track
     // (keyed by challenge id); the desert hunt has ambience only.
     music.play(atHome||(next==='autoplay'&&autoReturn==='home')?'lobby':warden?challengeId:null);
     $('app').classList.toggle('paused',next==='pause');
-    $('lobby').hidden=next!=='home';
+    $('lobby').hidden=next!=='home'&&next!=='loadout';
     $('pause-home').hidden=next!=='pause';
     $('pause-autoplay').hidden=next!=='pause';
     $('pause-boss').hidden=next!=='pause';
@@ -334,6 +344,7 @@ async function boot() {
       pause: '已暫停',
       play: '獵殺進行中',
       shop: '軍械整備中',
+      loadout:'出擊裝備選擇',
       challenges: '挑戰選擇', result: '挑戰結束',
       autoplay:'自動遊玩設定',
     }[next];
@@ -739,7 +750,7 @@ async function boot() {
   }
   function openShop() {
     if(world.playerLocked)return;
-    if (mode === 'challenges' || mode === 'result') return;
+    if (mode === 'challenges' || mode === 'result' || mode === 'loadout') return;
     if (mode === 'shop') return closeShop();
     shopReturn = mode;
     setMode('shop');
@@ -751,7 +762,6 @@ async function boot() {
     else setMode(shopReturn);
   }
   $('shop-btn').onclick = openShop;
-  $('lobby-armory').onclick = openShop;
   function setBet(value) {
     if (mode !== 'home') return;
     // The field shows thousands separators, so accept them (and spaces) when reading it back.
@@ -782,6 +792,7 @@ async function boot() {
       economy.owned.add(id);
       emit('shop:purchase', { weapon: id, price: weapons[id].price });
     }
+    if(selectLoadout(economy,id)){try{localStorage.setItem(loadoutStorage,JSON.stringify(economy.loadout))}catch{}}
     equip(id);
     stock();
   });
@@ -883,6 +894,7 @@ async function boot() {
   window.addEventListener('blur', pause);
   addEventListener('keydown', (e) => {
     if(loading.active)return;
+    if(mode==='loadout')return;
     if(mode==='play'&&world.playerLocked&&e.code!=='Escape'){e.preventDefault();return;}
     if(e.code==='KeyM'&&!e.repeat){e.preventDefault();if(mode==='autoplay')closeAutoPlay();else openAutoPlay();return;}
     if(mode==='autoplay'){
@@ -925,9 +937,9 @@ async function boot() {
       if (mode === 'play') {
         if (e.code === 'Space') jump();
         if (e.code === 'KeyR') reload();
-        if (e.code === 'Digit1') equip('rifle');
-        if (e.code === 'Digit2') equip('pistol');
-        if (e.code === 'Digit3') equip('knife');
+        if (e.code === 'Digit1') equip(slotWeapon(economy,'rifle'));
+        if (e.code === 'Digit2') equip(slotWeapon(economy,'pistol'));
+        if (e.code === 'Digit3') equip(slotWeapon(economy,'melee'));
         if (e.code === 'Digit4') equip('grenade');
         if (e.code === 'Digit5') equip('mg3');
       }
@@ -1153,8 +1165,8 @@ async function boot() {
     shotTime = weapon().delay - (economy.weapon === 'mg3' ? shotOverrun : 0);
     view.muzzleOrigin(camera, muzzle);
     view.shoot();
-    const kick = economy.weapon === 'mg3' ? 0.017 : economy.weapon === 'rifle' ? 0.013 : 0.023;
-    kickPitch = Math.min(0.055, kickPitch + kick);
+    const kick = weapon().recoil ?? (economy.weapon === 'deagle' ? .038 : economy.weapon === 'mg3' ? 0.017 : economy.weapon === 'rifle' ? 0.013 : 0.023);
+    kickPitch = Math.min(economy.weapon === 'deagle' ? .075 : .055, kickPitch + kick);
     kickYaw = T.MathUtils.clamp(kickYaw + (Math.random() - 0.5) * 0.012, -0.02, 0.02);
     fx.shot(muzzle, hit, economy.weapon);
     emit('weapon:fire', {
@@ -1261,7 +1273,7 @@ async function boot() {
       }
       return;
     }
-    if (triggerTap || (triggerHeld && economy.weapon !== 'pistol')) fire();
+    if (triggerTap || (triggerHeld && !weapon().semiAuto)) fire();
     triggerTap = triggerTap && triggerHeld && !view.isReady();
     if (meleeContact > 0) {
       meleeContact -= dt;

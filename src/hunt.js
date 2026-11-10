@@ -3,11 +3,15 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { makeHuntNavigation } from './hunt-navigation.js';
+import { awarenessRules, notices, chasePace, farTime, givesUp, makeNoiseLog } from './hunt-awareness.js';
+import { gameEvents } from './events.js';
 import { addCastleCharacterLight } from './castle-character-light.js';
 import { makeAnimatedRaycast } from './animated-raycast.js';
 import { warmRender } from './render-warmup.js';
 import { attachTargetNodes, targetNodePosition } from './target-nodes.js';
 
+// Shared by every level's hunt; each one reads it through its own cursor.
+const noiseLog = makeNoiseLog(gameEvents);
 const types = [
   {
     id: 'walker',
@@ -82,6 +86,11 @@ function loadSpecies() {
   const loader = new GLTFLoader();
   return Promise.all(types.map(async (type) => {
     const asset = await loader.loadAsync('monsters/' + type.id + '.glb');
+    // three.js keeps one shared shadow material and rebuilds its program only on changes
+    // such as skinning, taking the face side from whichever monster comes first. The
+    // double-sided mummy and necromancer then compiled a second skinned shadow program
+    // mid-fight (often on the first grenade). One shadow side gives every monster one program.
+    asset.scene.traverse((o) => { if (o.isMesh) o.material.shadowSide = T.BackSide; });
     const take = asset.animations.reduce((a, b) => (a.tracks.length > b.tracks.length ? a : b));
     const clip = (name, range) =>
       frameClip(take, name, range, asset.asset.extras?.frameOffset ?? 1);
@@ -223,8 +232,12 @@ export async function loadHunt(scene, world, boss = null) {
       groundY: spot.y,
       visibleToPlayer: false,
       scanIn: (index % 9) * 0.027,
+      senseIn: (index % 7) * 0.06,
+      farFor: 0,
+      seenHits: 0,
       animDebt: 0,
-      restDistance: 2.4 + (index % 4) * 0.25,
+      // Staggered stop distances fan a crowd out in front of the player instead of one clump.
+      restDistance: 2.6 + (index % 5) * 0.3,
       phase: Math.random() * Math.PI * 2,
       fadeBindings: null,
       opacity: 1,
@@ -451,7 +464,7 @@ export async function loadHunt(scene, world, boss = null) {
     e.root.rotation.set(0, Math.atan2(camera.position.x - spot.x, camera.position.z - spot.z), 0);
     e.holder.position.y = e.groundOffset;
     e.hp = e.maxHp = e.type.hp;
-    e.hitCount=0;e.rage=0;
+    e.hitCount=0;e.rage=0;e.seenHits=0;e.farFor=0;
     e.alive = true;
     e.finished = false;
     e.visibleToPlayer = false;
@@ -585,7 +598,46 @@ export async function loadHunt(scene, world, boss = null) {
     projection = new T.Matrix4(),
     sphere = new T.Sphere();
   const wanderGoal={x:0,y:0,z:0};
+  const eye = new T.Vector3(), heard = [];
+  let noiseCursor = noiseLog.serial;
+  function alert(e) {
+    e.farFor = 0;
+    if (e.nav.chasing) return;
+    e.nav.chasing = true;
+    for (const other of enemies)
+      if (other !== e && other.pack === e.pack && other.alive && !other.entry && !other.nav.chasing &&
+          other.root.position.distanceTo(e.root.position) <= awarenessRules.pack) {
+        other.nav.chasing = true; other.farFor = 0;
+      }
+  }
+  // A zombie notices the player by hearing them close by, seeing them, being hit, or
+  // hearing gunfire or a blast. A chaser left far behind gives up and wanders there.
+  function sense(e, distance, camera, playerFeet, dt) {
+    const p = e.root.position;
+    if (e.hitCount !== e.seenHits) {
+      const hit = e.hitCount > e.seenHits;
+      e.seenHits = e.hitCount;
+      if (hit) alert(e);
+    }
+    for (const noise of heard)
+      if (Math.hypot(p.x - noise.x, p.z - noise.z) <= noise.radius) { alert(e); break; }
+    if (e.nav.chasing) {
+      e.farFor = farTime(e.farFor, distance, dt);
+      if (givesUp(e.farFor) && !e.command.active) {
+        navigation.reset(e); e.home.copy(p); e.farFor = 0;
+      }
+      return;
+    }
+    e.senseIn -= dt;
+    if (e.senseIn > 0) return;
+    e.senseIn = awarenessRules.scan + (e.phase % 1) * 0.1;
+    if (notices(distance, Math.abs(e.groundY - playerFeet),
+      () => e.visibleToPlayer || openLine(camera, eye.set(p.x, e.groundY + e.height * 0.85, p.z)))) alert(e);
+  }
   function update(dt, time, live, camera, wave = 1, playerFeet = camera.position.y - 1.73) {
+    heard.length = 0;
+    // Paused or inactive levels skip the noise made meanwhile.
+    noiseCursor = live ? noiseLog.since(noiseCursor, (noise) => heard.push(noise)) : noiseLog.serial;
     if(live)navigation.update();
     frustum.setFromProjectionMatrix(
       projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
@@ -633,8 +685,7 @@ export async function loadHunt(scene, world, boss = null) {
         }
         e.unseen = e.visibleToPlayer ? 0 : e.unseen + dt;
         // Once alerted, keep following the live player position through cover.
-        // Visibility still gates initial detection and the player's auto-fire.
-        if(e.visibleToPlayer)e.nav.chasing=true;
+        sense(e, distance, camera, playerFeet, dt);
         if(e.nav.chasing) {
           e.nav.playerTarget.x=camera.position.x;e.nav.playerTarget.z=camera.position.z;
           e.nav.playerTarget.y=navigation.floorAt(camera.position.x,camera.position.z,playerFeet+.05);
@@ -652,7 +703,7 @@ export async function loadHunt(scene, world, boss = null) {
           if(order.time<=0)order.active=false;
           else goal=order.goal;
         }
-        motion=navigation.move(e,goal,dt,order.active?order.speed:e.pace*(e.nav.chasing?1:.55),
+        motion=navigation.move(e,goal,dt,order.active?order.speed:e.pace*(e.nav.chasing?chasePace(distance):.55),
           order.active ? .18 : e.nav.chasing?e.restDistance:.15,enemies);
       }
       if(motion==='air'&&e.actions.jump_down) {
@@ -664,7 +715,7 @@ export async function loadHunt(scene, world, boss = null) {
         setState(e,'stand_up');
         e.actions.stand_up.setEffectiveTimeScale(1);
       } else setState(e,motion==='walk'?'walk':'idle');
-      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 1.2 : 0.87;
+      e.actions.walk.timeScale = e.command.active ? 1.6 : e.nav.chasing ? 1.2 * chasePace(distance) : 0.87;
       // The four original species have no authored idle in FishDefine.
       const breath =
         e.state === 'idle' && !e.type.idle ? Math.sin(time * 2.1 + e.phase) * 0.009 : 0;
@@ -816,7 +867,16 @@ export async function loadHunt(scene, world, boss = null) {
     // variants so a respawn, first kill or first explosion cannot compile mid-fight.
     await renderer.compileAsync(scene,camera);
     await renderer.compileAsync(variants,camera,scene);
-    await warmRender(renderer,scene,camera);
+    // Shadows only come from opaque bodies, and fading-in monsters cast none. Cast every
+    // solid body once so each skinned shadow material compiles now, not when that
+    // species first steps into the light mid-fight. warmRender draws synchronously.
+    const restore=[];
+    for(const e of enemies)for(const {mesh,solid} of e.fadeBindings) {
+      restore.push([mesh,mesh.material,mesh.castShadow]);mesh.material=solid;mesh.castShadow=true;
+    }
+    const drawn=warmRender(renderer,scene,camera);
+    for(const [mesh,material,cast] of restore){mesh.material=material;mesh.castShadow=cast;}
+    await drawn;
     warmed=true;
   }
   return { enemies, targets, populate, update, kill, aimPoint, inSight, traceShot, summon, disembark, command, clearCommands,warmup,

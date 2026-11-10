@@ -150,7 +150,8 @@ export function preloadInterface(doc = document, win = globalThis) {
     const tasks = [];
     doc.fonts?.forEach((face) => tasks.push(face.load()));
     for (const img of doc.images) if (img.getAttribute('src')) tasks.push(img.decode());
-    for (const url of cssImages(doc)) {
+    const loadoutImages=['rifle','m4a1','scarl','vss','pistol','deagle','knife'].map(id=>'loadout/'+id+'.webp');
+    for (const url of [...cssImages(doc),...loadoutImages]) {
       const img = new Image();
       img.src = url;
       kept.push(img);

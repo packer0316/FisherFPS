@@ -1,0 +1,39 @@
+.lobby-loadout{width:min(560px,100%)}
+#lobby-loadout-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.loadout-slot{position:relative;min-width:0;display:flex;flex-direction:column;align-items:flex-start;padding:14px 12px 12px;background:linear-gradient(145deg,#1c2b2ede,#111b20ed);border:1px solid #8d93815c;border-top:2px solid #c7a874;text-align:left;transition:border-color .16s,background .16s}
+.loadout-slot:hover,.loadout-slot:focus-visible{border-color:#edbd7c;background:#263439}
+.loadout-slot>kbd{position:absolute;right:8px;top:8px;color:#bda77d}
+.loadout-slot .loadout-art{height:52px;width:100%;color:#c9c9b6;margin:10px 0 7px;display:flex;align-items:center;justify-content:center}
+.loadout-art svg{width:100%;height:100%;max-width:190px}
+.loadout-art img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 5px #0006)}
+.loadout-slot>span:last-of-type{display:flex;flex-direction:column;gap:4px}
+.loadout-slot small{color:#9aa8a5;font-size:10px;letter-spacing:.1em}
+.loadout-slot strong{font:600 18px BarlowC,sans-serif;color:#eee9db}
+.loadout-slot>i{position:absolute;bottom:15px;right:10px;font-style:normal;color:#d6b17a}
+#loadout-menu{z-index:30;background:#050a0bd9;backdrop-filter:blur(7px);padding:24px}
+.loadout-window{width:min(900px,100%);max-height:calc(100dvh - 48px);overflow:auto;background:linear-gradient(145deg,#1a2729,#101a1c);border:1px solid #87918d;border-top:3px solid #e4b176;box-shadow:0 25px 90px #0008;padding:28px}
+.loadout-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.loadout-heading small{font:11px BarlowC,sans-serif;letter-spacing:.2em;color:#d6ae76}
+.loadout-heading h2{margin:8px 0 0;font-size:27px;color:#eee8da}
+.loadout-heading .icon-button{font-size:27px;font-weight:300;color:#bbc0b6}
+.loadout-intro{margin:12px 0 22px;color:#a7b3b1;font-size:12px;line-height:1.8}
+.loadout-tabs{display:flex;gap:8px;border-bottom:1px solid #778e7c40;margin-bottom:18px;padding-bottom:13px}
+.loadout-tabs button{display:flex;align-items:center;gap:10px;padding:10px 24px;background:#101b1e;border:1px solid #81918750;color:#bbc6bf}
+.loadout-tabs button[aria-selected=true]{background:#e5b477;color:#191f20;border-color:#e5b477}
+.loadout-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.loadout-option{min-width:0;position:relative;padding:15px 18px 13px;text-align:left;border:1px solid #7891834a;background:#101a1dc2;display:flex;flex-direction:column;gap:6px;color:#e7e5d7}
+.loadout-option:hover{border-color:#bca377;background:#1d2c2c}
+.loadout-option.is-equipped{border-color:#edb977;box-shadow:inset 3px 0 #edb977;background:linear-gradient(130deg,#bc9a5928,#132124)}
+.loadout-option-top{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#9caeaa}
+.loadout-option-top b{font-size:10px;font-weight:400;color:#b6c2b9}
+.is-equipped .loadout-option-top b{color:#ecc393}
+.loadout-option .loadout-art{height:95px;display:flex;align-items:center;justify-content:center;color:#d1d0ba}
+.loadout-option>strong{font:600 25px BarlowC,sans-serif;letter-spacing:.035em}
+.loadout-description{font-size:11px;color:#a9b8b1}
+.loadout-spec{border-top:1px solid #80908026;margin-top:7px;padding-top:9px;font-size:10px;color:#8c9f98}
+.loadout-footer{margin-top:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:18px;border-top:1px solid #81918740}
+.loadout-footer>span{font-size:11px;color:#b9c8bc}
+.loadout-footer button{padding:12px 23px;background:#e7b578;border:1px solid #f7d39d;color:#19201f;white-space:nowrap}
+@media(max-width:760px){.lobby-loadout{width:100%}.loadout-window{padding:20px}.loadout-tabs button{padding:10px 16px}.loadout-roster{gap:9px}.loadout-option{padding:12px}.loadout-option .loadout-art{height:80px}}
+@media(max-width:460px){#loadout-menu{padding:12px}.loadout-window{max-height:calc(100dvh - 24px);padding:17px}.loadout-tabs{gap:6px}.loadout-tabs button{padding:9px 14px}.loadout-option-top{flex-direction:column;gap:4px}.loadout-option .loadout-art{height:65px}.loadout-option>strong{font-size:21px}.loadout-description{font-size:10px}.loadout-footer{align-items:flex-start;gap:8px}.loadout-footer>span{line-height:1.8}.loadout-footer button{padding:11px 15px}.loadout-slot{padding-inline:10px}.loadout-slot .loadout-art{height:42px}}
+@media(max-height:550px) and (min-width:621px){.loadout-slot{padding:6px 9px}.loadout-slot .loadout-art{height:26px;margin:8px 0 4px}.loadout-slot>span:last-of-type{flex-direction:row;align-items:center;gap:6px}.loadout-slot strong{font-size:13px}.loadout-slot>i{bottom:8px}.loadout-slot>kbd{font-size:8px;top:4px;right:4px}}

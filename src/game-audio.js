@@ -11,6 +11,24 @@ import { bossCoinCadence } from './boss-payout.js';
 // Reload keyframes as fractions of the reload (rifle-reload.js, weapon-rig.js, mg3-reload.js).
 // `after` adds seconds for parts that happen off screen (a dropped magazine reaching the floor).
 const reloadParts = {
+  m4a1: [
+    { clip: 'weapons/ak_mag_out', at: 0.23 },
+    { clip: 'weapons/mag_drop', at: 0.32, after: 0.42, volume: 0.4 },
+    { clip: 'weapons/ak_mag_in', at: 0.64 },
+    { clip: 'weapons/ak_bolt', at: 0.91, empty: true },
+  ],
+  scarl: [
+    { clip: 'weapons/ak_mag_out', at: 0.23 },
+    { clip: 'weapons/mag_drop', at: 0.32, after: 0.42, volume: 0.4 },
+    { clip: 'weapons/ak_mag_in', at: 0.67 },
+    { clip: 'weapons/ak_bolt', at: 0.91, empty: true },
+  ],
+  vss: [
+    { clip: 'weapons/ak_mag_out', at: 0.23 },
+    { clip: 'weapons/mag_drop', at: 0.32, after: 0.42, volume: 0.4 },
+    { clip: 'weapons/ak_mag_in', at: 0.70 },
+    { clip: 'weapons/ak_bolt', at: 0.91, empty: true },
+  ],
   rifle: [
     { clip: 'weapons/ak_mag_out', at: 0.235 },
     { clip: 'weapons/mag_drop', at: 0.325, after: 0.42, volume: 0.45 },
@@ -21,6 +39,12 @@ const reloadParts = {
     { clip: 'weapons/pistol_mag_out', at: 0.2 },
     { clip: 'weapons/pistol_mag_in', at: 0.655 },
     { clip: 'weapons/pistol_slide', at: 0.925, empty: true },
+  ],
+  deagle: [
+    { clip: 'weapons/deagle_mag_out', at: 0.18 },
+    { clip: 'weapons/mag_drop', at: 0.18, after: 0.45, volume: 0.4 },
+    { clip: 'weapons/deagle_mag_in', at: 0.72 },
+    { clip: 'weapons/deagle_slide', at: 0.91, empty: true },
   ],
   mg3: [
     { clip: 'weapons/mg_latch', at: 0.075 },
@@ -35,12 +59,17 @@ const reloadParts = {
   ],
 };
 const shots = {
+  m4a1: { clip: 'weapons/m4a1_fire', n: 3, volume: 0.22, limit: 4 },
+  scarl: { clip: 'weapons/scarl_fire', n: 3, volume: 0.24, limit: 4 },
+  vss: { clip: 'weapons/vss_fire', n: 3, volume: 0.15, limit: 3 },
   // Player gunfire sits well under the rest of the mix (rifle ~-14 dB, pistol/MG3 ~-5 dB) so long sessions stay comfortable.
   rifle: { clip: 'weapons/ak_fire', n: 3, volume: 0.2, limit: 4, tail: 'weapons/ak_tail', tailAfter: 0.24, tailVolume: 0.12 },
   pistol: { clip: 'weapons/pistol_fire', n: 3, volume: 0.43, limit: 3 },
+  deagle: { clip: 'weapons/deagle_fire', n: 3, volume: 0.52, limit: 3 },
   mg3: { clip: 'weapons/mg_fire', n: 3, volume: 0.47, limit: 6, tail: 'weapons/mg_tail', tailAfter: 0.16, tailVolume: 0.28 },
 };
-const equipClips = { rifle: 'weapons/equip_rifle', pistol: 'weapons/equip_pistol', mg3: 'weapons/equip_mg',
+const equipClips = { rifle: 'weapons/equip_rifle', pistol: 'weapons/equip_pistol', deagle: 'weapons/equip_deagle', mg3: 'weapons/equip_mg',
+  m4a1: 'weapons/equip_rifle', scarl: 'weapons/equip_rifle', vss: 'weapons/equip_rifle',
   grenade: 'weapons/equip_grenade' };
 const groanPitch = { walker: 1, stalker: 1.17, raider: 0.94, mummy: 0.8, necromancer: 0.9 };
 const ambience = {
@@ -119,7 +148,7 @@ export function makeGameAudio() {
     }
   });
   on('weapon:dry', ({ weapon }) => {
-    if (throttle('dry', 0.3)) audio.play(weapon === 'pistol' ? 'weapons/dry_pistol' : 'weapons/dry_rifle', { volume: 0.6 });
+    if (throttle('dry', 0.3)) audio.play(weapon === 'pistol' || weapon === 'deagle' ? 'weapons/dry_pistol' : 'weapons/dry_rifle', { volume: 0.6 });
   });
   on('weapon:reload', ({ weapon, empty, duration }) => {
     audio.cancel('reload');
