@@ -28,6 +28,7 @@ import { makeAutoPlayUI } from './auto-play-ui.js';
 import { makeSceneMusic } from './scene-music.js';
 import { releaseScene } from './level-release.js';
 import { getAudio } from './audio.js';
+import { version } from '../package.json';
 import { trackLoaderItems, makeLoadingScreen, preloadInterface } from './loading-screen.js';
 import { STARTING_WALLET,DEFAULT_BET,MIN_BET,MAX_BET,validBet,stepBet,captureRule,captureChance,formatChance,makePrizeRandom,resolveCaptureHit,makeRtpLedger } from './rtp.js';
 
@@ -35,6 +36,8 @@ import { STARTING_WALLET,DEFAULT_BET,MIN_BET,MAX_BET,validBet,stepBet,captureRul
 // textures that modules start without awaiting.
 const loading = makeLoadingScreen(trackLoaderItems(T.DefaultLoadingManager));
 const arenaTitles = { warden: '前往 C 區監獄中庭', bride: '前往永夜古堡', stationmaster: '前往中央車站' };
+// package.json is the only place the version lives; bump it there.
+$('app-version').textContent = 'v' + version;
 
 async function boot() {
   const job = loading.begin('正在載入獵場');

@@ -30,6 +30,7 @@
 .lobby-heading {grid-column:1;grid-row:1;align-self:start;padding-top:8px;}
 .lobby-eyebrow {display:flex;align-items:center;gap:10px;font:12px BarlowC,sans-serif;letter-spacing:.23em;color:#d6d6c8;}
 .lobby-eyebrow > span {height:4px;width:24px;background:var(--lobby-gold);transform:skewX(-28deg);box-shadow:7px 0 #e9b77345;}
+.lobby-version {font:10px/1 BarlowS,sans-serif;letter-spacing:.14em;color:#9aa5a2;border:1px solid #d5d3bf38;background:#0c141a80;padding:3px 6px 2px;margin-left:4px;}
 .lobby-heading h1 {line-height:0;margin:24px 0 19px;}
 .lobby-title-ink {position:relative;display:inline-block;max-width:100%;margin-left:-9px;vertical-align:top;}
 .lobby-brush-title {display:block;width:clamp(300px,28vw,455px);max-width:100%;height:auto;opacity:0;}
@@ -218,6 +219,7 @@
   .lobby-heading {min-height:0;padding:0;display:flex;align-items:center;gap:16px;}
   .lobby-eyebrow {font-size:8px;gap:8px;letter-spacing:.12em;order:2;}
   .lobby-eyebrow > span {width:12px;}
+  .lobby-version {font-size:8px;padding:2px 4px 1px;margin-left:0;}
   .lobby-heading h1 {margin:0;}
   .lobby-brush-title {width:auto;max-width:none;height:54px;margin:0;}
   .lobby-title-ink {margin:0;}
