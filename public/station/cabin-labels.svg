@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="512" viewBox="0 0 1024 512">
+  <rect width="1024" height="512" fill="#233430"/>
+  <rect width="1024" height="132" fill="#101916"/>
+  <g fill="#d9b876" font-family="'Microsoft JhengHei', 'PingFang TC', sans-serif">
+    <text x="50" y="77" font-size="34" font-weight="bold" letter-spacing="5">本站</text>
+    <path d="M170 67H224m-13-13 13 13-13 13" fill="none" stroke="#d9b876" stroke-width="5"/>
+    <text x="620" y="87" text-anchor="middle" font-size="70" font-weight="bold" letter-spacing="7">新北產業園區站</text>
+  </g>
+  <path d="M0 132H1024" stroke="#6e8171" stroke-width="2"/>
+  <g fill="#c8b381" font-family="Arial, sans-serif">
+    <path d="M42 178L69 226H15Z"/><path d="M42 191v17m0 6v4" stroke="#233430" stroke-width="5"/>
+    <text x="91" y="218" font-size="36" font-weight="bold" letter-spacing="3">MIND THE GAP</text>
+    <text x="590" y="216" font-size="26" letter-spacing="2">KEEP DOORS CLEAR</text>
+  </g>
+  <path d="M0 256H1024" stroke="#6e8171" stroke-width="2"/>
+  <g fill="#d3d4bb" font-family="Arial, 'Microsoft JhengHei', 'PingFang TC', sans-serif">
+    <text x="40" y="317" font-size="28" letter-spacing="4">CAR</text>
+    <text x="39" y="405" font-size="78" font-weight="bold" letter-spacing="3">C–07</text>
+    <text x="42" y="457" font-size="23" letter-spacing="2">新北產業園區站</text>
+    <g transform="translate(370 280)">
+      <circle cx="42" cy="27" r="17"/>
+      <path d="M37 55v51h66v63m-67-61-6 62" fill="none" stroke="#d3d4bb" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 75v61h68" fill="none" stroke="#829e91" stroke-width="10"/>
+    </g>
+    <text x="535" y="339" font-size="32" font-weight="bold" letter-spacing="2">PRIORITY SEATING</text>
+    <text x="535" y="386" font-size="24" letter-spacing="1">PLEASE OFFER YOUR SEAT</text>
+    <text x="535" y="426" font-size="24" letter-spacing="1">TO THOSE IN NEED</text>
+  </g>
+</svg>

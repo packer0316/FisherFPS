@@ -6,10 +6,10 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 import { stationGallery, stationGround, stationStairSurface, stationStairSolids, stationMeshBarriers, makeStationCollision } from './station-collision.js';
 import { stationAutoAllows, stationAutoRecovery, stationAutoStep, stationAutoRoute } from './station-autoplay.js';
 import { refineStationCeiling } from './station-ceiling.js';
-import { addTrainInterior, openTrainAisle } from './station-train-interior.js';
+import { createTrainInterior, openTrainAisle } from './station-train-interior.js';
 import { makeStationTransit } from './station-transit.js';
 import { makeTrainSchedule } from './station-train-state.js';
-import { makeStationLight, stationDoorIntensity, preserveStationBake } from './station-lighting.js';
+import { makeStationLight, preserveStationBake } from './station-lighting.js';
 import { stationEnvironment, stationDetailMap, stationSurface } from './station-materials.js';
 import { stationLightBudget } from './station-light-budget.js';
 import { makeStationWindowLight, receiveStationWindowLight } from './station-window-light.js';
@@ -18,15 +18,16 @@ import { getAudio } from './audio.js';
 
 export async function makeStation(scene, coarse, environment) {
   const loader = new GLTFLoader(), textures = new T.TextureLoader();
-  const [building, gate, flag, body, normalHead, goldHead, env, wet, doorLight, headLight, warmHeadLight, plaster, plasterNormal, paving, pavingNormal,
-    plasterRough,pavingRough,woodMap,woodNormal,woodRough,trainWindow,leatherNormal,leatherRough] = await Promise.all([
+  const [building, gate, flag, body, normalHead, goldHead, env, wet, headLight, warmHeadLight, plaster, plasterNormal, paving, pavingNormal,
+    plasterRough,pavingRough,woodMap,woodNormal,woodRough,trainWindow,leatherNormal,leatherRough,cabinLabels] = await Promise.all([
     ...['station-scene','station-door','station-flag','train-body','train-head','train-gold'].map(n=>loader.loadAsync('station/'+n+'.glb')),
-    ...['environment.png','wet-noise.png','door-light.jpg','head-light.jpg','head-light-warm.jpg'].map(n=>textures.loadAsync('station/'+n)),
+    ...['environment.png','wet-noise.png','head-light.jpg','head-light-warm.jpg'].map(n=>textures.loadAsync('station/'+n)),
     textures.loadAsync('surfaces/plaster-diff.webp'),textures.loadAsync('surfaces/plaster-nor_gl.webp'),
     textures.loadAsync('surfaces/paving-diff.webp'),textures.loadAsync('surfaces/paving-nor_gl.webp'),
     ...['plaster-rough','paving-rough','wood-diff','wood-nor_gl','wood-rough'].map(n=>textures.loadAsync('surfaces/'+n+'.webp')),
     textures.loadAsync('station/train-window.jpg'),
     textures.loadAsync('station/leather-normal.jpg'),textures.loadAsync('station/leather-rough.jpg'),
+    textures.loadAsync('station/cabin-labels.svg'),
   ]);
   scene.background = new T.Color(0x121b2a); scene.fog = new T.FogExp2(0x18263a,.008);
   scene.environment=stationEnvironment(env);scene.environmentIntensity=.72;
@@ -53,6 +54,7 @@ export async function makeStation(scene, coarse, environment) {
   plaster.colorSpace=paving.colorSpace=woodMap.colorSpace=T.SRGBColorSpace;
   for(const t of [plaster,plasterNormal,plasterRough,paving,pavingNormal,pavingRough,woodMap,woodNormal,woodRough]){t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=coarse?4:8;}
   trainWindow.colorSpace=T.SRGBColorSpace;
+  cabinLabels.colorSpace=T.SRGBColorSpace;cabinLabels.anisotropy=coarse?4:8;
   const detail={map:stationDetailMap(plasterNormal,plasterRough,coarse),coarse},leatherDetail={map:stationDetailMap(leatherNormal,leatherRough,coarse),coarse};
   leatherNormal.dispose();leatherRough.dispose();
   const masonry=new T.MeshStandardMaterial({color:0x8e8273,map:plaster,normalMap:plasterNormal,normalScale:new T.Vector2(.35,.35),roughness:.83});
@@ -81,7 +83,7 @@ export async function makeStation(scene, coarse, environment) {
     if(!batches.has(mat))batches.set(mat,[]);batches.get(mat).push(g);
   }
   const station=building.scene;station.position.z=24;scene.add(station);station.updateMatrixWorld(true);
-  doorLight.flipY=headLight.flipY=warmHeadLight.flipY=false;
+  headLight.flipY=warmHeadLight.flipY=false;
   wet.wrapS=wet.wrapT=T.RepeatWrapping;wet.repeat.set(3,8);
   station.traverse(o=>{if(!o.isMesh)return;o.material=o.material.clone();o.material.map.anisotropy=coarse?4:8;
     o.material.side=T.DoubleSide;o.material.roughness=o.name==='floor'?.6:.65;o.material.metalness=o.name==='floor'?.08:.08;
@@ -202,18 +204,25 @@ export async function makeStation(scene, coarse, environment) {
   for(const [mat,parts] of batches){const g=mergeGeometries(parts,false);parts.forEach(p=>p.dispose());const mesh=new T.Mesh(g,mat);
     mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.impactKind='wall';scene.add(mesh);zones.push(mesh);}
 
-  function sign(text,x,y,z,width,height,color='#e1c995'){
+  function sign(text,x,y,z,width,height,color='#e1c995',heading=''){
     const c=document.createElement('canvas');c.width=1024;c.height=256;const ctx=c.getContext('2d');
     const map=new T.CanvasTexture(c);map.colorSpace=T.SRGBColorSpace;
     const m=new T.Group(),faceMaterial=new T.MeshStandardMaterial({map,emissiveMap:map,emissive:0xffffff,emissiveIntensity:.35,roughness:.65});
     m.add(new T.Mesh(new T.BoxGeometry(width+.08,height+.08,.08),materials.metal));
     for(const side of [-1,1]){const face=new T.Mesh(new T.PlaneGeometry(width,height),faceMaterial);face.position.z=side*.05;face.rotation.y=side<0?Math.PI:0;m.add(face);}
     m.position.set(x,y,z);scene.add(m);
-    const draw=(label)=>{ctx.fillStyle='#111b20';ctx.fillRect(0,0,1024,256);ctx.strokeStyle=color;ctx.lineWidth=6;ctx.strokeRect(12,12,1000,232);ctx.fillStyle=color;ctx.font='bold 64px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,512,128,940);map.needsUpdate=true;};draw(text);return {mesh:m,draw};
+    const draw=(label)=>{
+      ctx.fillStyle='#111b20';ctx.fillRect(0,0,1024,256);ctx.strokeStyle=color;ctx.lineWidth=6;ctx.strokeRect(12,12,1000,232);
+      ctx.fillStyle=color;ctx.textAlign='center';ctx.textBaseline='middle';
+      if(heading){ctx.font='bold 46px sans-serif';ctx.fillText(heading,512,70,940);}
+      ctx.font=`bold ${heading?54:64}px sans-serif`;ctx.fillText(label,512,heading?163:128,940);
+      map.needsUpdate=true;
+    };draw(text);return {mesh:m,draw};
   }
-  sign('CENTRAL TERMINAL · 中央車站',0,9.9,-25.6,10,1.8);
+  sign('新北產業園區站',0,9.9,-25.6,10,1.8);
   sign('TICKETS · 售票大廳',0,8,34.05,8,1.5).mesh.rotation.y=Math.PI;
-  const boards=[sign('01 月台 · 列車即將進站',-6.3,5.9,8.8,5,1.25),sign('02 月台 · 等候列車',6.3,5.9,8.8,5,1.25,'#a3d9ef')];
+  const boards=[sign('01 月台 · 列車即將進站',-6.3,5.9,8.8,5,1.25,'#e1c995','新北產業園區站'),
+    sign('02 月台 · 等候列車',6.3,5.9,8.8,5,1.25,'#a3d9ef','新北產業園區站')];
   // A real clock face, with separate hands, above the concourse.
   const clockFace=new T.Mesh(new T.CircleGeometry(1.15,48),new T.MeshStandardMaterial({color:0xead5a3,emissive:0x3e3322,side:T.DoubleSide}));clockFace.position.set(0,12.5,-25.4);scene.add(clockFace);
   const clockParts=[];
@@ -240,18 +249,20 @@ export async function makeStation(scene, coarse, environment) {
     s.position.addScaledVector(s.velocity,dt);steamPosition.setXYZ(i,s.position.x,s.position.y,s.position.z);
     steamData.setXY(i,.4+t*1.4,Math.sin(t*Math.PI)*.22);if(t<1)live++;}
     steam.visible=live>0;steamPosition.needsUpdate=steamData.needsUpdate=true;}
+  const addTrainInterior=createTrainInterior({woodMap,woodNormal,woodRough,cabinLabels,trainWindow,detail,leatherDetail});
   const trains=[-1,1].map((side,index)=>{
     const group=new T.Group(),rig=clone(body.scene),head=clone((index?goldHead:normalHead).scene);group.add(rig,head);group.position.set(side*11.6,.20,0);group.rotation.y=index?Math.PI:0;scene.add(group);
-    const doors=[],doorLights=[];
+    const doors=[];
     for(const [model,asset]of [[rig,body],[head,index?goldHead:normalHead]]){
+      // The original fixed-camera scene faked cabin spill with an additive sheet
+      // across the doorway. A walkable FPS cabin uses its actual interior lights.
+      const doorOverlays=[];model.traverse(o=>{if(o.isMesh&&o.name==='door_light')doorOverlays.push(o);});
+      for(const overlay of doorOverlays)overlay.removeFromParent();
       const mixer=new T.AnimationMixer(model);const action=mixer.clipAction(asset.animations[0]);action.play();mixer.setTime(1/30);
       const closed=new Map();model.traverse(o=>{if(o.isBone&&/door\d+$/.test(o.name))closed.set(o.name,o.position.clone());});
       mixer.setTime(96/30);action.paused=true;
       model.traverse(o=>{if(closed.has(o.name))doors.push({bone:o,closed:closed.get(o.name),open:o.position.clone()});
         if(!o.isMesh)return;o.frustumCulled=false;
-        if(o.name==='door_light'){
-          o.material=makeStationLight(doorLight,.32,new T.Color(0,0,0));o.visible=false;doorLights.push(o);return;
-        }
         if(o.name==='Cylinder'){
           o.material=makeStationLight(index?headLight:warmHeadLight,.24,index?new T.Color(91/255,143/255,143/255):new T.Color(231/255,231/255,231/255));return;
         }
@@ -263,7 +274,7 @@ export async function makeStation(scene, coarse, environment) {
     group.updateMatrixWorld(true);openTrainAisle(rig);
     rig.traverse(o=>{if(o.isSkinnedMesh&&o.name!=='door_light'){o.computeBoundingSphere();o.boundingSphere.radius*=1.06;o.frustumCulled=true;}});
     head.traverse(o=>{if(o.isSkinnedMesh&&o.name!=='Cylinder'){o.computeBoundingSphere();o.boundingSphere.radius*=1.06;o.frustumCulled=true;}});
-    const interiorSolids=addTrainInterior(group,zones,{woodMap,woodNormal,woodRough,detail,leatherDetail,lightBudget});
+    const interiorSolids=addTrainInterior(group,zones,lightBudget);
     const collider=new T.Box3();colliders.push(collider);
     const headlamp=lightBudget.add(0xaddbff,15,18,group,new T.Vector3(0,1.4,24));
     const statuses={waiting:'等候列車',approaching:'列車進站 · 請勿越線',braking:'列車停靠',opening:'車門開啟',boarding:'車門開啟 · 殭屍下車',closing:'車門關閉 · 即將發車',departing:'列車離站'};
@@ -281,7 +292,7 @@ export async function makeStation(scene, coarse, environment) {
       const from=new T.Vector3(side*10.2,.34,p.z),to=new T.Vector3(side*7.5,0,p.z);
       const enemy=hunt.disembark(from,to,camera);if(enemy)emit('station:passenger',{side:index,species:enemy.type.id,position:from.toArray()});
     },()=>transit.beginDeparture(trains[index]));
-    return {group,doors,doorLights,collider,headlamp,schedule,side,index,interiorSolids};
+    return {group,doors,collider,headlamp,schedule,side,index,interiorSolids};
   });
   const transit=makeStationTransit(trains,(phase,detail)=>{
     emit('station:evacuation',{phase,...detail});
@@ -293,7 +304,6 @@ export async function makeStation(scene, coarse, environment) {
     const offset=s.phase==='waiting'?-150:s.phase==='approaching'?-85*Math.pow(1-p,3):s.phase==='departing'?90*p*p:0;
     group.position.z=offset*direction;group.visible=s.phase!=='waiting';
     const open=s.door* s.door*(3-2*s.door);for(const d of doors)d.bone.position.lerpVectors(d.closed,d.open,open);
-    const light=stationDoorIntensity(s);for(const mesh of train.doorLights){mesh.visible=light>0;mesh.material.color.setScalar(light);}
     train.headlamp.intensity=group.visible?15:0;group.updateMatrixWorld(true);
     collider.set(new T.Vector3(group.position.x-1.72,-.8,group.position.z+(index?-25:-24)),new T.Vector3(group.position.x+1.72,3.45,group.position.z+(index?24:25)));
   }
@@ -325,7 +335,7 @@ export async function makeStation(scene, coarse, environment) {
     autoPlayAllows:stationAutoAllows,autoPlayRecovery:stationAutoRecovery,autoPlayStep:stationAutoStep,autoPlayRoute:stationAutoRoute(terrainHeight),
     spawn:{x:0,z:23,yaw:0,pitch:.03},sun,colliders,zones,terrainHeight,...collision,breeze,trains,boards,
     coinFloor:(x,z)=>transit.region(x,z,0,.05)?.floor??-Infinity,
-    district:()=> '中央車站 · 雙月台',centerShadow(){},
+    district:()=> '新北產業園區站',centerShadow(){},
     updateVisuals:(dt,camera)=>lightBudget.update(dt,camera),
     bindHunt(h,c){hunt=h;camera=c;},
     updateGates(dt,p,y,height){

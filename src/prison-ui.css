@@ -260,7 +260,10 @@
 .station #boss-health {border-top-color:#abcbdc}
 .station #boss-fill {background:linear-gradient(90deg,#43768a,#c7dfe6)}
 .station #boss-cue {font-size:11px}
-.station .location b {font-size:10px}
+.station .location {flex-wrap:wrap;row-gap:2px}
+.station .location span {font-size:10px;white-space:nowrap}
+.station .location b {font-size:10px;white-space:nowrap}
+.station #brief h1 {font-size:clamp(26px,2.8vw,42px)}
 #train-warning {position:absolute;z-index:25;top:24%;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 40px));padding:21px 24px;background:#241b12ed;border:1px solid #c99753;border-top:3px solid #f3bb65;box-shadow:0 12px 40px #0006;color:#fff0d5;text-align:center;pointer-events:none}
 #train-warning[hidden] {display:none}
 #train-warning small {display:block;color:#edb76b;font-size:11px;letter-spacing:3px;margin-bottom:10px}

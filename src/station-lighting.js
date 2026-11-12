@@ -23,16 +23,6 @@ export function makeStationLight(map, opacity, tint = new T.Color(1, 1, 1)) {
   return material;
 }
 
-export function stationDoorIntensity(schedule) {
-  // Original DockedValue=83/255 is linear; its gamma multiplier is sqrt(value).
-  // Our FPS schedule has a separate opening phase: never light a moving/closed door.
-  let amount = 0;
-  if (schedule.phase === 'opening') amount = T.MathUtils.smoothstep(schedule.door, .08, .9);
-  else if (schedule.phase === 'boarding') amount = 1;
-  else if (schedule.phase === 'closing') amount = 1 - T.MathUtils.smoothstep(schedule.time, 0, .4333333);
-  return Math.sqrt(83 / 255) * amount;
-}
-
 // The source station shader uses baked, unlit artwork. Retain part of that baked
 // light so physical roof shadows do not darken it a second time in the FPS scene.
 export function preserveStationBake(material, strength) {

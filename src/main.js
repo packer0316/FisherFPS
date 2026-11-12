@@ -38,7 +38,7 @@ import { STARTING_WALLET,DEFAULT_BET,MIN_BET,MAX_BET,validBet,stepBet,captureRul
 // Counting three.js loader items from the first load lets the loading screen wait for
 // textures that modules start without awaiting.
 const loading = makeLoadingScreen(trackLoaderItems(T.DefaultLoadingManager));
-const arenaTitles = { warden: '前往 C 區監獄中庭', bride: '前往永夜古堡', stationmaster: '前往中央車站' };
+const arenaTitles = { warden: '前往 C 區監獄中庭', bride: '前往永夜古堡', stationmaster: '前往新北產業園區站' };
 // package.json is the only place the version lives; bump it there.
 $('app-version').textContent = 'v' + version;
 
@@ -335,7 +335,7 @@ async function boot() {
     $('pause-home').hidden=next!=='pause';
     $('pause-autoplay').hidden=next!=='pause';
     $('pause-boss').hidden=next!=='pause';
-    document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.station?' 中央車站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
+    document.querySelector('header .mode').lastChild.textContent=atHome?' 遊戲大廳':world.station?' 新北產業園區站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     alignWallet();
     $('brief').hidden = next !== 'ready' && next !== 'pause';
     $('shop').hidden = next !== 'shop';
@@ -352,7 +352,7 @@ async function boot() {
     }[next];
     $('deploy').querySelector('strong').textContent = next === 'pause' ? '返回' : '進入獵場';
     $('brief').querySelector('h1').innerHTML = (next === 'pause' ? '行動暫停'
-      : world.station ? '中央車站' : world.castle ? '永夜古堡' : warden ? '監獄中庭' : '沙境獵場') + '<span>.</span>';
+      : world.station ? '新北產業園區站' : world.castle ? '永夜古堡' : warden ? '監獄中庭' : '沙境獵場') + '<span>.</span>';
     if (next === 'home') $('lock-hint').hidden = true;
     if (next !== 'play' && document.pointerLockElement === canvas) document.exitPointerLock();
   }
@@ -368,7 +368,7 @@ async function boot() {
   function openAutoPlay(){
     if(world.playerLocked||loadingChallenge||bossVictory||!['home','ready','pause','play'].includes(mode))return;
     autoReturn=mode;setMode('autoplay');
-    autoUI.open(hunt.roster,warden?challengeId:'desert',world.station?'中央車站 · 雙月台':world.castle?'永夜古堡 · 冥婚大廳':warden?'C 區監獄中庭':'沙境獵場',economy.bet);
+    autoUI.open(hunt.roster,warden?challengeId:'desert',world.station?'新北產業園區站 · 雙月台':world.castle?'永夜古堡 · 冥婚大廳':warden?'C 區監獄中庭':'沙境獵場',economy.bet);
   }
   function closeAutoPlay(){
     autoUI.close();
@@ -514,10 +514,10 @@ async function boot() {
     $('app').classList.toggle('station',!!world.station);
     $('boss-name').textContent=warden?.target.type.name??'';
     $('boss-health').setAttribute('aria-label',(warden?.target.type.name??'BOSS')+'賞金與怒氣');
-    $('radar-panel').querySelector('.location b').textContent=world.station?'TERMINAL':world.castle?'LA VEUVE':warden?'BLOCK C':'SECTOR 01';
+    $('radar-panel').querySelector('.location b').textContent=world.station?'雙月台':world.castle?'LA VEUVE':warden?'BLOCK C':'SECTOR 01';
     $('brief').querySelector('.operation').lastChild.textContent=world.station?' LAST DEPARTURE':world.castle?' LA VEUVE':warden?' BLOCK C':' DUST BAZAAR';
     $('brief').querySelector('p').textContent=world.station?'軌道與兩側月台都可行走，留意行進中的列車，碰撞會將你撞回月台。開門時可從兩側進出車廂，發車前會引導車內玩家下車。善用樓梯與二樓平台躲避站長招式。':world.castle?'留意詛咒預警：離開紅紫色範圍，穿過空隙。鬼新娘會召喚亡者並驅使衝鋒。':warden?'典獄長會預判跑位。紅線出現後變向，留意重擊後的第二道紅線。':'瞄準獵物開火，擊倒領賞。沒有命中怪物會全額退款。';
-    document.querySelector('header .mode').lastChild.textContent=world.station?' 中央車站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
+    document.querySelector('header .mode').lastChild.textContent=world.station?' 新北產業園區站':world.castle?' 冥婚古堡':warden?' 監獄討伐':' 殭屍獵場';
     shadowLeft=0;renderer.shadowMap.needsUpdate=true;cameraPose();alignWallet();
   }
   async function enterChallenge(id=challengeId) {
